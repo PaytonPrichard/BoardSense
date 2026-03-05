@@ -452,7 +452,7 @@ CATEGORY_COLORS: dict[str, str] = {
     "From Your Games":  "#90a8b8",
 }
 
-TRACKED_USER = "JMoney781"
+TRACKED_USER = ""
 
 # ── Achievement definitions ─────────────────────────────────────────────────
 _ACHIEVEMENTS = {
@@ -1585,7 +1585,8 @@ def render_game_review_tab():
         cc_col1, cc_col2, cc_col3 = st.columns([2, 1, 1])
         with cc_col1:
             username = st.text_input(
-                "Chess.com username", value=TRACKED_USER, key="cc_username"
+                "Chess.com username", value="", key="cc_username",
+                placeholder="Enter username",
             )
         with cc_col2:
             n_months = st.number_input(
@@ -1604,12 +1605,11 @@ def render_game_review_tab():
                         return
 
         fetched_games = st.session_state.get("chesscom_games", [])
-        cc_user       = st.session_state.get("chesscom_username", TRACKED_USER)
+        cc_user       = st.session_state.get("chesscom_username", "")
 
         if not fetched_games:
             st.info(
-                f"Enter a username and click **Fetch Games** to load recent games. "
-                f"Default: **{TRACKED_USER}**."
+                "Enter a username and click **Fetch Games** to load recent games."
             )
             return
 
@@ -3704,7 +3704,7 @@ def _build_puzzle_phases(puzzle: dict) -> list[dict] | None:
 
 def _ttr_get_username() -> str:
     """Return the username for curriculum progress tracking."""
-    return st.session_state.get("profile_username_built", TRACKED_USER)
+    return st.session_state.get("profile_username_built", "")
 
 
 def _ttr_get_rating() -> int | None:
@@ -4295,7 +4295,7 @@ def render_puzzles_tab():
 
     # ── Require profile summaries ─────────────────────────────────────────────
     if "profile_summaries" not in st.session_state:
-        username = st.session_state.get("profile_username", TRACKED_USER)
+        username = st.session_state.get("profile_username", "")
         saved = db.load_profile(username)
         if saved:
             _, summaries, _ = saved
@@ -6405,7 +6405,7 @@ def _deep_dive_to_review(pgn_text: str, white: str, black: str):
         st.session_state["game_source"] = "Lichess"
     else:
         st.session_state.chesscom_games = [game_entry]
-        st.session_state.chesscom_username = st.session_state.get("profile_username_built", TRACKED_USER)
+        st.session_state.chesscom_username = st.session_state.get("profile_username_built", "")
         st.session_state["game_source"] = "Chess.com"
     st.session_state.from_profile_dive = True
     for k in ("moves", "headers", "game_review", "coaching_concepts",
@@ -7337,8 +7337,8 @@ def render_dashboard_tab():
                 horizontal=True, key="onboard_platform",
             )
             _ob_label = "Chess.com username" if _ob_plat == "Chess.com" else "Lichess username"
-            _ob_default = TRACKED_USER if _ob_plat == "Chess.com" else ""
-            _ob_user = st.text_input(_ob_label, value=_ob_default, key="onboard_username")
+            _ob_user = st.text_input(_ob_label, value="", key="onboard_username",
+                                     placeholder="Enter username")
             _ob_est = _estimate_analysis_time(2, 12)
             st.caption(f"~2 months of games at standard depth ({_ob_est})")
             if st.button(
@@ -7960,7 +7960,7 @@ def render_dashboard_tab():
 def render_profile_tab():
     # ── Controls (platform + username moved above sub-nav) ───────────────────
     profile_platform = st.session_state.get("profile_platform", "Chess.com")
-    username = st.session_state.get("profile_username", TRACKED_USER)
+    username = st.session_state.get("profile_username", "")
 
     with st.expander("Advanced settings"):
         _adv1, _adv2 = st.columns(2)
@@ -8131,7 +8131,7 @@ def render_profile_tab():
 
     # ── Display profile — restore from DB if session was cleared ──────────────
     if "profile_data" not in st.session_state:
-        username_now = st.session_state.get("profile_username", TRACKED_USER)
+        username_now = st.session_state.get("profile_username", "")
         saved = db.load_profile(username_now)
         if saved:
             p_data, p_summaries, built_at = saved
@@ -8142,8 +8142,8 @@ def render_profile_tab():
             db.save_active_user(username_now, profile_platform)
         else:
             st.info(
-                f"Enter a Chess.com username (default: **{TRACKED_USER}**) and click "
-                f"**▶ Build Profile** to generate your personalised coaching profile."
+                "Enter your username and click "
+                "**▶ Build Profile** to generate your personalised coaching profile."
             )
             return
 
@@ -9068,9 +9068,9 @@ with tab_profile:
         )
     with _prof_ctrl_user:
         _prof_plat_label = "Chess.com username" if _prof_platform == "Chess.com" else "Lichess username"
-        _prof_plat_default = TRACKED_USER if _prof_platform == "Chess.com" else ""
-        _prof_username = st.text_input(_prof_plat_label, value=_prof_plat_default,
-                                       key="profile_username")
+        _prof_username = st.text_input(_prof_plat_label, value="",
+                                       key="profile_username",
+                                       placeholder="Enter username")
 
     _profile_section = st.radio(
         "Section",
