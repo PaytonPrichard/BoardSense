@@ -8999,10 +8999,15 @@ with _hdr_right:
                 # ── Log out ───────────────────────────────────────────────
                 if st.button("Log out", key="hdr_logout", use_container_width=True):
                     db.clear_active_user()
-                    for _k in ["profile_data", "profile_summaries", "profile_username_built",
-                               "profile_built_at", "profile_build_depth", "profile_tc_filter",
-                               "coaching_concepts", "profile_platform", "profile_username"]:
-                        st.session_state.pop(_k, None)
+                    # Keys to preserve across logout (UI prefs only)
+                    _keep = {
+                        "board_theme", "piece_set", "board_square_size",
+                        "sound_enabled", "animation_enabled", "show_legal_moves",
+                        "show_coordinates", "high_contrast", "reduce_motion",
+                    }
+                    _preserved = {k: st.session_state[k] for k in _keep if k in st.session_state}
+                    st.session_state.clear()
+                    st.session_state.update(_preserved)
                     st.rerun()
 
 # ── Background build: check progress & render banner ─────────────────────────
