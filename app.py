@@ -5090,7 +5090,7 @@ def _check_build_progress():
 
 
 def _render_build_banner(job: dict):
-    """Render a persistent progress banner for the background build."""
+    """Render a persistent progress banner with kings animation and ETA."""
     done = job.get("done", 0)
     total = job.get("total", 1)
     status = job.get("status", "analyzing")
@@ -5103,7 +5103,7 @@ def _render_build_banner(job: dict):
     else:
         pct = int((done / max(total, 1)) * 100)
         if eta_secs < 90:
-            eta_text = f"{int(eta_secs)}s remaining" if eta_secs > 0 else "Starting…"
+            eta_text = f"{int(eta_secs)}s remaining" if eta_secs > 0 else "Estimating…"
         elif eta_secs < 3600:
             eta_text = f"~{math.ceil(eta_secs / 60)}m remaining"
         else:
@@ -5117,20 +5117,38 @@ def _render_build_banner(job: dict):
     st.markdown(
         f'<div style="background:linear-gradient(135deg,#0d253f 0%,#1a3a5c 100%);'
         f'border:1px solid #3a6ea5;border-radius:12px;padding:16px 20px;margin:8px 0 12px;">'
-        f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">'
-        f'<span style="font-size:1.1em;">⚙️</span>'
-        f'<span style="font-size:0.85em;font-weight:700;color:#7ab4e0;letter-spacing:0.06em;">'
-        f'{label}</span>'
+        # Kings animation
+        f'<div style="text-align:center;padding:12px 0 8px;">'
+        f'<style>'
+        f'@keyframes wKBuild {{ 0%,100% {{ transform:translateX(-52px); }} 35%,65% {{ transform:translateX(0); }} }}'
+        f'@keyframes bKBuild {{ 0%,100% {{ transform:translateX(52px); }} 35%,65% {{ transform:translateX(0); }} }}'
+        f'@keyframes swBuild {{ 0%,30% {{ opacity:0;transform:translateY(0) scale(0.7); }}'
+        f'  48%,58% {{ opacity:1;transform:translateY(-3px) scale(1.15); }}'
+        f'  72%,100% {{ opacity:0;transform:translateY(0) scale(0.7); }} }}'
+        f'</style>'
+        f'<span style="font-size:2.6em;display:inline-block;color:#f0ead6;line-height:1;'
+        f'animation:wKBuild 3.2s ease-in-out infinite;">♔</span>'
+        f'<span style="font-size:1.2em;display:inline-block;color:#e2c97e;line-height:1;'
+        f'margin:0 -6px;vertical-align:middle;animation:swBuild 3.2s ease-in-out infinite;">⚔</span>'
+        f'<span style="font-size:2.6em;display:inline-block;color:#6a8aaa;line-height:1;'
+        f'animation:bKBuild 3.2s ease-in-out infinite;">♚</span>'
         f'</div>'
+        # Label
+        f'<div style="text-align:center;margin-bottom:10px;">'
+        f'<span style="font-size:0.85em;font-weight:700;color:#7ab4e0;letter-spacing:0.06em;">'
+        f'{label}</span></div>'
+        # Progress bar
         f'<div style="background:#0a1929;border-radius:6px;height:8px;overflow:hidden;margin-bottom:8px;">'
         f'<div style="background:linear-gradient(90deg,#3a6ea5,#5ba0d9);height:100%;'
         f'width:{pct}%;transition:width 0.5s ease;border-radius:6px;"></div></div>'
+        # Status + ETA
         f'<div style="display:flex;justify-content:space-between;align-items:center;">'
         f'<span style="font-size:0.8em;color:#8ab4d0;">{status_text}</span>'
-        f'<span style="font-size:0.8em;color:#6a8a9a;">{eta_text}</span>'
+        f'<span style="font-size:0.8em;color:#e2c97e;font-weight:600;">{eta_text}</span>'
         f'</div>'
-        f'<div style="font-size:0.75em;color:#5a7a8a;margin-top:6px;">'
-        f'Feel free to explore other sections — personalized features will activate once your profile is ready.'
+        # Subtitle
+        f'<div style="font-size:0.75em;color:#5a7a8a;margin-top:6px;text-align:center;">'
+        f'Feel free to explore other tabs — your profile will appear when ready.'
         f'</div></div>',
         unsafe_allow_html=True,
     )
