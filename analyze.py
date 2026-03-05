@@ -20,12 +20,6 @@ sys.stdout.reconfigure(encoding="utf-8")
 # Load API key from .env file (local dev); Streamlit Cloud uses st.secrets
 load_dotenv()
 
-if not os.environ.get("ANTHROPIC_API_KEY"):
-    raise RuntimeError(
-        "ANTHROPIC_API_KEY not set. Add it to .streamlit/secrets.toml "
-        "(Streamlit Cloud) or a .env file (local development)."
-    )
-
 # How deeply Stockfish thinks (higher = stronger but slower, 10 is plenty for a tutor)
 STOCKFISH_DEPTH = 10
 

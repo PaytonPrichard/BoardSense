@@ -4,19 +4,12 @@ All Claude AI logic: move explanation and full game review.
 """
 
 import json
-import os
 import re
 import chess
 from anthropic import Anthropic
 from dotenv import load_dotenv
 
 load_dotenv()
-
-if not os.environ.get("ANTHROPIC_API_KEY"):
-    raise RuntimeError(
-        "ANTHROPIC_API_KEY not set. Add it to .streamlit/secrets.toml "
-        "(Streamlit Cloud) or a .env file (local development)."
-    )
 
 # Regex matching SAN-like tokens: piece moves (Nxd5+), pawn moves (e4, exd5),
 # castling (O-O, O-O-O), promotions (e8=Q). Word-bounded to avoid English words.
