@@ -11,7 +11,9 @@ import chess.pgn
 
 BASE = "https://api.chess.com/pub"
 _HEADERS = {"User-Agent": "BoardSenseApp/1.0 (github.com/boardsense)"}
-_RATE_DELAY = 0.5  # seconds between archive requests
+_RATE_DELAY = 0.5   # seconds between archive requests
+_CACHE_TTL = 600    # cache fetch results for 10 minutes
+_cache: dict[tuple, tuple[float, list]] = {}  # (username, n_months) -> (timestamp, games)
 
 
 def get_archives(username: str) -> list[str]:
@@ -54,11 +56,19 @@ def fetch_month(archive_url: str) -> list[dict]:
     return result
 
 
-def fetch_recent_games(username: str, n_months: int = 1) -> list[dict]:
+def fetch_recent_games(username: str, n_months: int = 1, *, bypass_cache: bool = False) -> list[dict]:
     """
     Fetch the most recent n_months of games for a Chess.com username.
     Returns a flat list of {pgn, headers} dicts, newest games first.
+    Results are cached for 10 minutes to avoid rate limits.
     """
+    key = (username.lower(), n_months)
+    now = time.time()
+    if not bypass_cache and key in _cache:
+        cached_at, cached_games = _cache[key]
+        if now - cached_at < _CACHE_TTL:
+            return cached_games
+
     archives  = get_archives(username)
     all_games: list[dict] = []
     for i, url in enumerate(archives[:n_months]):
@@ -75,4 +85,6 @@ def fetch_recent_games(username: str, n_months: int = 1) -> list[dict]:
             continue
         except Exception:
             continue
+
+    _cache[key] = (now, all_games)
     return all_games

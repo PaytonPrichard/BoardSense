@@ -8096,9 +8096,9 @@ def render_profile_tab():
             with st.spinner(f"Fetching games for {username}..."):
                 try:
                     if profile_platform == "Lichess":
-                        games = lichess.fetch_recent_games(username, int(n_months))
+                        games = lichess.fetch_recent_games(username, int(n_months), bypass_cache=True)
                     else:
-                        games = chesscom.fetch_recent_games(username, int(n_months))
+                        games = chesscom.fetch_recent_games(username, int(n_months), bypass_cache=True)
                 except Exception as e:
                     st.error(f"Failed to fetch from {profile_platform}: {e}")
                     return

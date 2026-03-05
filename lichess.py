@@ -5,6 +5,7 @@ No authentication required.
 """
 
 import io
+import time
 from datetime import datetime, timedelta, timezone
 
 import chess.pgn
@@ -14,6 +15,8 @@ _HEADERS = {
     "User-Agent": "BoardSenseApp/1.0 (github.com/boardsense)",
     "Accept": "application/x-chess-pgn",
 }
+_CACHE_TTL = 600  # cache fetch results for 10 minutes
+_cache: dict[tuple, tuple[float, list]] = {}  # (username, n_months) -> (timestamp, games)
 
 
 def _parse_pgn_stream(text: str) -> list[dict]:
@@ -33,12 +36,20 @@ def _parse_pgn_stream(text: str) -> list[dict]:
 
 
 def fetch_recent_games(
-    username: str, n_months: int = 1, max_games: int = 50
+    username: str, n_months: int = 1, max_games: int = 50, *, bypass_cache: bool = False,
 ) -> list[dict]:
     """
     Fetch the most recent games for a Lichess username.
     Returns a list of {pgn, headers} dicts, newest first.
+    Results are cached for 10 minutes to avoid rate limits.
     """
+    key = (username.lower(), n_months)
+    now = time.time()
+    if not bypass_cache and key in _cache:
+        cached_at, cached_games = _cache[key]
+        if now - cached_at < _CACHE_TTL:
+            return cached_games
+
     since_dt = datetime.now(timezone.utc) - timedelta(days=n_months * 30)
     since_ms = int(since_dt.timestamp() * 1000)
 
@@ -51,8 +62,13 @@ def fetch_recent_games(
     }
 
     resp = requests.get(url, headers=_HEADERS, params=params, timeout=30)
+    if resp.status_code == 429:
+        raise RuntimeError(
+            "Lichess rate limit reached — please wait a few minutes and try again."
+        )
     resp.raise_for_status()
 
     games = _parse_pgn_stream(resp.text)
     games.reverse()  # newest first
+    _cache[key] = (now, games)
     return games
