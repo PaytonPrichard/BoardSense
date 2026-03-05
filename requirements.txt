@@ -1,0 +1,7 @@
+python-chess
+stockfish
+anthropic
+python-dotenv
+streamlit
+plotly
+requests

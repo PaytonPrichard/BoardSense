@@ -1,0 +1,25 @@
+# Secrets
+.env
+
+# Database
+*.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Streamlit secrets (local copy)
+.streamlit/secrets.toml
+
+# Stockfish binaries (platform-specific, not portable)
+stockfish-*/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Claude Code
+.claude/
