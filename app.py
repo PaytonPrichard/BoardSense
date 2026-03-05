@@ -998,6 +998,8 @@ def move_commentary_panel(move: dict, all_moves: list[dict], idx: int):
 
     key_exp = f"explanation_{mn}_{move['color']}"
     if st.button("Ask Tutor", key=f"ask_{mn}_{move['color']}", use_container_width=True):
+      if not _api_limit_reached():
+        _count_api_call()
         with st.spinner("Asking Claude... (computing engine lines)"):
             followup_data = get_followup_lines(move["fen_after"], n_plies=4)
             followup_text = _format_followup(
@@ -1238,6 +1240,9 @@ def ai_review_panel(moves: list[dict], headers: dict):
 
 
 def _run_review(moves, headers):
+    if _api_limit_reached():
+        return
+    _count_api_call()
     with st.spinner("Claude is reviewing the game..."):
         st.session_state.game_review = full_game_review(moves, headers)
 
@@ -3038,17 +3043,19 @@ def render_course_view():
             st.rerun()
     else:
         if st.button("💡 Get Hint", key=f"course_hint_{puz_idx}", use_container_width=True):
-            with st.spinner("Thinking…"):
-                try:
-                    puzzle["hint"] = generate_puzzle_hint(
-                        puzzle["fen"],
-                        puzzle["best_move_san"],
-                        puzzle["player_color"],
-                        puzzle["classification"],
-                    )
-                except Exception:
-                    puzzle["hint"] = "Focus on piece coordination and look for tactical opportunities."
-            st.rerun()
+            if not _api_limit_reached():
+                _count_api_call()
+                with st.spinner("Thinking…"):
+                    try:
+                        puzzle["hint"] = generate_puzzle_hint(
+                            puzzle["fen"],
+                            puzzle["best_move_san"],
+                            puzzle["player_color"],
+                            puzzle["classification"],
+                        )
+                    except Exception:
+                        puzzle["hint"] = "Focus on piece coordination and look for tactical opportunities."
+                st.rerun()
 
     # Self-report result buttons
     st.markdown('<div style="height:4px;"></div>', unsafe_allow_html=True)
@@ -3065,7 +3072,8 @@ def render_course_view():
             st.rerun()
 
 
-_DAILY_LESSON_CAP = 50  # max lesson generations per client per day
+_DAILY_LESSON_CAP = 50   # max lesson generations per client per day
+_DAILY_API_CAP    = 100  # max Claude API calls (hints, explanations, tutor, review, chat)
 
 
 def _get_client_id() -> str:
@@ -3089,8 +3097,30 @@ def _lesson_gen_remaining() -> int:
 
 
 def _count_lesson_gen(n: int = 1):
-    """Record lesson generation(s) against today's quota."""
+    """Record lesson generation(s) against today's quota (lesson + API counters)."""
     db.increment_generation_count(_get_client_id(), n)
+    db.increment_generation_count(_get_client_id() + ":api", n)
+
+
+# ── Unified API-call rate limiting ───────────────────────────────────────────
+
+def _api_calls_remaining() -> int:
+    """Return how many Claude API calls this client has left today."""
+    used = db.get_daily_generation_count(_get_client_id() + ":api")
+    return max(0, _DAILY_API_CAP - used)
+
+
+def _count_api_call(n: int = 1):
+    """Record Claude API call(s) against today's quota."""
+    db.increment_generation_count(_get_client_id() + ":api", n)
+
+
+def _api_limit_reached() -> bool:
+    """Check if daily API limit is reached and show warning if so."""
+    if _api_calls_remaining() <= 0:
+        st.warning(f"Daily AI usage limit reached ({_DAILY_API_CAP} calls/day). Resets tomorrow.")
+        return True
+    return False
 
 
 def _bulk_generate_lessons(concepts: list[dict]):
@@ -3995,6 +4025,9 @@ def _render_ttr_module_flow():
 
         lesson_area = st.empty()
         if lesson_key not in st.session_state:
+            if _api_limit_reached():
+                return
+            _count_api_call()
             with lesson_area.container():
                 _render_lesson_loading_card(concept)
             rating_band = stage.get("rating_band", "1000–1200")
@@ -4124,17 +4157,19 @@ def _render_ttr_module_flow():
                 st.rerun()
         else:
             if st.button("💡 Get Hint", key=f"ttr_hint_{puz_idx}", use_container_width=True):
-                with st.spinner("Thinking\u2026"):
-                    try:
-                        puzzle["hint"] = generate_puzzle_hint(
-                            puzzle["fen"],
-                            puzzle["best_move_san"],
-                            puzzle["player_color"],
-                            puzzle.get("classification", ""),
-                        )
-                    except Exception:
-                        puzzle["hint"] = "Focus on piece coordination and look for tactical opportunities."
-                st.rerun()
+                if not _api_limit_reached():
+                    _count_api_call()
+                    with st.spinner("Thinking\u2026"):
+                        try:
+                            puzzle["hint"] = generate_puzzle_hint(
+                                puzzle["fen"],
+                                puzzle["best_move_san"],
+                                puzzle["player_color"],
+                                puzzle.get("classification", ""),
+                            )
+                        except Exception:
+                            puzzle["hint"] = "Focus on piece coordination and look for tactical opportunities."
+                    st.rerun()
 
         # Self-report result buttons
         st.markdown('<div style="height:4px;"></div>', unsafe_allow_html=True)
@@ -4593,17 +4628,21 @@ def render_puzzles_tab():
         if showing_explanation:
             was_correct = st.session_state.get("puzzle_explanation_correct", True)
             if not puzzle.get("explanation"):
-                with st.spinner("Generating explanation\u2026"):
-                    try:
-                        puzzle["explanation"] = generate_puzzle_explanation(
-                            puzzle["fen"],
-                            puzzle["best_move_san"],
-                            puzzle["player_color"],
-                            puzzle["classification"],
-                            was_correct,
-                        )
-                    except Exception:
-                        puzzle["explanation"] = f"The best move was {puzzle['best_move_san']}."
+                if _api_limit_reached():
+                    puzzle["explanation"] = f"The best move was {puzzle['best_move_san']}."
+                else:
+                    _count_api_call()
+                    with st.spinner("Generating explanation\u2026"):
+                        try:
+                            puzzle["explanation"] = generate_puzzle_explanation(
+                                puzzle["fen"],
+                                puzzle["best_move_san"],
+                                puzzle["player_color"],
+                                puzzle["classification"],
+                                was_correct,
+                            )
+                        except Exception:
+                            puzzle["explanation"] = f"The best move was {puzzle['best_move_san']}."
             border_color = "#2e7d32" if was_correct else "#b71c1c"
             bg_color = "#0d2818" if was_correct else "#1a0a0a"
             label = "CORRECT" if was_correct else "INCORRECT"
@@ -4659,17 +4698,19 @@ def render_puzzles_tab():
                     st.rerun()
             else:
                 if st.button("\U0001f4a1 Get Hint", key=f"puz_hint_{idx}", use_container_width=True):
-                    with st.spinner("Thinking\u2026"):
-                        try:
-                            puzzle["hint"] = generate_puzzle_hint(
-                                puzzle["fen"],
-                                puzzle["best_move_san"],
-                                puzzle["player_color"],
-                                puzzle["classification"],
-                            )
-                        except Exception:
-                            puzzle["hint"] = "Focus on piece coordination and look for tactical opportunities."
-                    st.rerun()
+                    if not _api_limit_reached():
+                        _count_api_call()
+                        with st.spinner("Thinking\u2026"):
+                            try:
+                                puzzle["hint"] = generate_puzzle_hint(
+                                    puzzle["fen"],
+                                    puzzle["best_move_san"],
+                                    puzzle["player_color"],
+                                    puzzle["classification"],
+                                )
+                            except Exception:
+                                puzzle["hint"] = "Focus on piece coordination and look for tactical opportunities."
+                        st.rerun()
 
             # R7. Navigation (hidden during explanation)
             col_prev, col_shuf, col_skip, col_next = st.columns([1, 1.5, 1, 1])
@@ -6895,10 +6936,14 @@ def render_coach_tab():
 
     # ── Auto-respond when last message is from user ───────────────────────────
     if msgs and msgs[-1]["role"] == "user":
-        profile_ctx = _build_coach_context()
-        with st.chat_message("assistant"):
-            response = st.write_stream(coach_chat_stream(msgs, profile_ctx))
-        msgs.append({"role": "assistant", "content": response})
+        if _api_limit_reached():
+            msgs.append({"role": "assistant", "content": "Daily AI usage limit reached. Please try again tomorrow."})
+        else:
+            _count_api_call()
+            profile_ctx = _build_coach_context()
+            with st.chat_message("assistant"):
+                response = st.write_stream(coach_chat_stream(msgs, profile_ctx))
+            msgs.append({"role": "assistant", "content": response})
         # Single rerun after streaming: hides the starter chips cleanly.
         st.rerun()
 
@@ -7984,7 +8029,10 @@ def render_profile_tab():
         # Double-click guard
         if username in _BUILD_JOBS:
             st.warning("A profile build is already in progress.")
+        elif _api_limit_reached():
+            pass
         else:
+            _count_api_call()
             new_games_to_analyse = st.session_state.get(_ng_cache_key, [])
             saved_profile = db.load_profile(username)
             if not saved_profile or not new_games_to_analyse:
@@ -8017,7 +8065,10 @@ def render_profile_tab():
         # Double-click guard
         if username in _BUILD_JOBS:
             st.warning("A profile build is already in progress.")
+        elif _api_limit_reached():
+            pass
         else:
+            _count_api_call()
             # Clear any existing profile for this user
             st.session_state.pop("profile_data", None)
             st.session_state.pop("profile_summaries", None)
