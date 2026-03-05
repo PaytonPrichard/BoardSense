@@ -8126,7 +8126,19 @@ def render_profile_tab():
 
     # ── Guard: show info while build is running ──────────────────────────────
     if st.session_state.get("_build_username"):
-        st.info("Your profile is being built in the background. Feel free to explore other tabs!")
+        _guard_user = st.session_state["_build_username"]
+        _guard_job = _BUILD_JOBS.get(_guard_user)
+        if _guard_job:
+            _gd = _guard_job.get("done", 0)
+            _gt = max(_guard_job.get("total", 1), 1)
+            _ge = _guard_job.get("eta_secs", 0)
+            _ge_s = f" (~{int(_ge)}s left)" if _ge > 0 else ""
+            if _guard_job.get("status") == "synthesizing":
+                st.info("♔ ⚔ ♚  Claude is synthesizing your profile… almost done!")
+            else:
+                st.progress(_gd / _gt, text=f"♔ ⚔ ♚  Analysing game {_gd}/{_gt}{_ge_s}")
+        else:
+            st.info("Your profile is being built in the background. Feel free to explore other tabs!")
         return
 
     # ── Display profile — restore from DB if session was cleared ──────────────
@@ -8998,6 +9010,16 @@ _build_poll()
 _active_build_job = _check_build_progress()
 if _active_build_job:
     _render_build_banner(_active_build_job)
+    # Native fallback in case HTML/CSS banner doesn't render on Cloud
+    _abj_done = _active_build_job.get("done", 0)
+    _abj_total = max(_active_build_job.get("total", 1), 1)
+    _abj_pct = _abj_done / _abj_total
+    _abj_eta = _active_build_job.get("eta_secs", 0)
+    _abj_eta_str = f" (~{int(_abj_eta)}s left)" if _abj_eta > 0 else ""
+    if _active_build_job.get("status") == "synthesizing":
+        st.info("♔ ⚔ ♚  Claude is synthesizing your profile… almost done!")
+    else:
+        st.progress(_abj_pct, text=f"♔ ⚔ ♚  Analysing game {_abj_done}/{_abj_total}{_abj_eta_str}")
 
 tab_dashboard, tab_profile, tab_learn, tab_puzzles, tab_review = st.tabs(
     ["Dashboard", "Profile", "Learn", "Puzzles", "Game Review"]
