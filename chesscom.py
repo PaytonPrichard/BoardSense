@@ -5,11 +5,13 @@ No authentication required.
 """
 
 import io
+import time
 import requests
 import chess.pgn
 
 BASE = "https://api.chess.com/pub"
 _HEADERS = {"User-Agent": "BoardSenseApp/1.0 (github.com/boardsense)"}
+_RATE_DELAY = 0.5  # seconds between archive requests
 
 
 def get_archives(username: str) -> list[str]:
@@ -19,6 +21,10 @@ def get_archives(username: str) -> list[str]:
     """
     url  = f"{BASE}/player/{username.lower()}/games/archives"
     resp = requests.get(url, headers=_HEADERS, timeout=10)
+    if resp.status_code == 403:
+        raise RuntimeError(
+            "Chess.com rate limit reached — please wait a few minutes and try again."
+        )
     resp.raise_for_status()
     archives = resp.json().get("archives", [])
     return list(reversed(archives))
@@ -55,10 +61,18 @@ def fetch_recent_games(username: str, n_months: int = 1) -> list[dict]:
     """
     archives  = get_archives(username)
     all_games: list[dict] = []
-    for url in archives[:n_months]:
+    for i, url in enumerate(archives[:n_months]):
         try:
+            if i > 0:
+                time.sleep(_RATE_DELAY)
             month_games = fetch_month(url)
             all_games.extend(reversed(month_games))   # newest-first within month
+        except requests.HTTPError as e:
+            if e.response is not None and e.response.status_code == 403:
+                raise RuntimeError(
+                    "Chess.com rate limit reached — please wait a few minutes and try again."
+                ) from e
+            continue
         except Exception:
             continue
     return all_games

@@ -313,7 +313,13 @@ def save_profile(username: str, profile: dict, summaries: list) -> None:
     Overwrites any previous build for that username.
     """
     import json
+    key = username.strip().lower()
     with _connect() as conn:
+        # Remove any case-variant duplicates before upserting
+        conn.execute(
+            "DELETE FROM profiles WHERE username != ? AND username = ? COLLATE NOCASE",
+            (key, key),
+        )
         conn.execute(
             "INSERT INTO profiles (username, profile_json, summaries_json, n_games, built_at) "
             "VALUES (?, ?, ?, ?, datetime('now')) "
@@ -322,19 +328,20 @@ def save_profile(username: str, profile: dict, summaries: list) -> None:
             "summaries_json = excluded.summaries_json, "
             "n_games        = excluded.n_games, "
             "built_at       = excluded.built_at",
-            (username, json.dumps(profile), json.dumps(summaries), len(summaries)),
+            (key, json.dumps(profile), json.dumps(summaries), len(summaries)),
         )
 
 
 def save_profile_history(username: str, profile: dict, n_games: int) -> None:
     """Append one snapshot to the history table (never overwrites)."""
     import json
+    key = username.strip().lower()
     record = profile.get("record", {})
     with _connect() as conn:
         conn.execute(
             "INSERT INTO profile_history (username, overall_acc, skill_json, n_games, record_json, built_at) "
             "VALUES (?, ?, ?, ?, ?, datetime('now'))",
-            (username, profile.get("overall_acc", 0.0),
+            (key, profile.get("overall_acc", 0.0),
              json.dumps(profile.get("skill_ratings", {})), n_games,
              json.dumps(record)),
         )
@@ -551,11 +558,12 @@ def get_review_due_concepts(days: int = 3, threshold: float = 0.8) -> list[dict]
 
 def save_active_user(username: str, platform: str = "Chess.com") -> None:
     """Remember the logged-in user across page refreshes."""
+    key = username.strip().lower()
     with _connect() as conn:
         conn.execute(
             "INSERT INTO active_session (id, username, platform) VALUES (1, ?, ?) "
             "ON CONFLICT(id) DO UPDATE SET username=excluded.username, platform=excluded.platform",
-            (username, platform),
+            (key, platform),
         )
 
 

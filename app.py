@@ -7347,7 +7347,7 @@ def render_dashboard_tab():
             ):
                 # Pre-fill Profile tab inputs and navigate
                 st.session_state.profile_platform = _ob_plat
-                st.session_state.profile_username = _ob_user.strip()
+                st.session_state.profile_username = _ob_user.strip().lower()
                 st.session_state.profile_months = 2
                 st.session_state.profile_depth = 12
                 st.session_state._auto_build = True
@@ -7960,7 +7960,7 @@ def render_dashboard_tab():
 def render_profile_tab():
     # ── Controls (platform + username moved above sub-nav) ───────────────────
     profile_platform = st.session_state.get("profile_platform", "Chess.com")
-    username = st.session_state.get("profile_username", "")
+    username = st.session_state.get("profile_username", "").strip().lower()
 
     with st.expander("Advanced settings"):
         _adv1, _adv2 = st.columns(2)
