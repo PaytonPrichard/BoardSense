@@ -4978,6 +4978,7 @@ def _profile_overview_html(profile: dict) -> str:
 
 
 _SECS_PER_GAME = {10: 0.12 * 41, 12: 0.35 * 41, 15: 1.0 * 41}  # ≈ 5 / 14 / 41 s/game
+_MAX_BUILD_GAMES = 100  # cap games per profile build to limit CPU on hosted environments
 
 _DEPTH_INFO = {
     10: "Fast scan (~5s/game) — may miss deeper tactical sequences (3+ move combos). Good for a quick overview.",
@@ -5154,11 +5155,12 @@ def _render_build_banner(job: dict):
     )
 
 
-@st.fragment(run_every=2)
+@st.fragment(run_every=3)
 def _build_poll():
-    """Auto-polling fragment: triggers st.rerun() when a background build finishes."""
+    """Auto-polling fragment: only active while a background build is in progress."""
     username = st.session_state.get("_build_username")
     if not username or username not in _BUILD_JOBS:
+        # No build in progress — do nothing (fragment stays dormant)
         return
     job = _BUILD_JOBS[username]
     if job["status"] in ("done", "error"):
@@ -8107,6 +8109,10 @@ def render_profile_tab():
                 st.warning(f"No games found for {username} in the last {n_months} month(s).")
                 return
 
+            if len(games) > _MAX_BUILD_GAMES:
+                st.info(f"Found {len(games)} games — analysing the {_MAX_BUILD_GAMES} most recent for performance.")
+                games = games[:_MAX_BUILD_GAMES]
+
             job = {
                 "status": "analyzing", "done": 0, "total": len(games),
                 "eta_secs": 0, "started": time.time(), "result": None, "error": None,
@@ -9011,7 +9017,10 @@ with _hdr_right:
                     st.rerun()
 
 # ── Background build: check progress & render banner ─────────────────────────
-_build_poll()
+# Only activate the polling fragment when a build is actually in progress;
+# run_every fires on the server even if the function returns early.
+if st.session_state.get("_build_username"):
+    _build_poll()
 _active_build_job = _check_build_progress()
 if _active_build_job:
     _render_build_banner(_active_build_job)

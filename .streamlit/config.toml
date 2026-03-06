@@ -1,3 +1,10 @@
+[server]
+maxMessageSize = 200           # MB — default is 200, explicit for safety
+runOnSave = false              # don't auto-reload during dev
+
+[browser]
+gatherUsageStats = false
+
 [theme]
 base                   = "dark"
 backgroundColor        = "#0c1021"
