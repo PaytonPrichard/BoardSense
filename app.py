@@ -4977,10 +4977,6 @@ def render_training_tab():
 
 
 def render_puzzles_tab():
-    # ── Hidden trigger buttons (clicked by iframe JS, hidden via JS below) ────
-    _puz_ac = st.button("\u25cf\u2713", key="puz_ac")   # correct → advance
-    _puz_aw = st.button("\u25cf\u2717", key="puz_aw")   # skip/wrong → advance
-
     # ── Require profile summaries ─────────────────────────────────────────────
     if "profile_summaries" not in st.session_state:
         username = st.session_state.get("profile_username", "")
@@ -4995,6 +4991,10 @@ def render_puzzles_tab():
             st.session_state.navigate_to_dashboard = True
             st.rerun()
         return
+
+    # ── Hidden trigger buttons (clicked by iframe JS, hidden via JS below) ────
+    _puz_ac = st.button("\u25cf\u2713", key="puz_ac")   # correct → advance
+    _puz_aw = st.button("\u25cf\u2717", key="puz_aw")   # skip/wrong → advance
 
     # ── Build / restore queue ─────────────────────────────────────────────────
     if "puzzle_queue" not in st.session_state:
