@@ -122,7 +122,7 @@ def _run_profile_build(username: str, games: list, depth: int, platform: str, jo
 # ── Page config ─────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="BoardSense",
-    page_icon="♟",
+    page_icon="♔",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -8086,6 +8086,7 @@ def _render_onboarding_tour():
             "title": "Profile",
             "body": "Build your player profile by connecting your Chess.com or Lichess account. We'll analyze your games with Stockfish and Claude AI.",
             "icon": "&#128100;",
+            "nav": "navigate_to_profile",
         },
         {
             "title": "No Online Account?",
@@ -8101,16 +8102,19 @@ def _render_onboarding_tour():
             "title": "Learn",
             "body": "My Path gives you a personalized learning sequence. Coaching has concept lessons, Training has structured courses, and Ask Coach lets you chat with an AI coach.",
             "icon": "&#128218;",
+            "nav": "navigate_to_coaching",
         },
         {
             "title": "Puzzles",
             "body": "Practice tactics from positions in YOUR actual games. Puzzles adapt to your weaknesses and track your improvement.",
             "icon": "&#9823;",
+            "nav": "navigate_to_puzzles",
         },
         {
             "title": "Game Review",
             "body": "Upload any PGN or fetch from Chess.com/Lichess. Get move-by-move Stockfish analysis with Claude AI commentary on every critical moment.",
             "icon": "&#128269;",
+            "nav": "navigate_to_review",
         },
     ]
     if step >= len(_TOUR_STEPS):
@@ -8151,7 +8155,11 @@ def _render_onboarding_tour():
                 if is_last:
                     st.session_state._onboarding_dismissed = True
                 else:
-                    st.session_state._onboarding_step = step + 1
+                    next_step = step + 1
+                    st.session_state._onboarding_step = next_step
+                    nav_key = _TOUR_STEPS[next_step].get("nav")
+                    if nav_key:
+                        st.session_state[nav_key] = True
                 st.rerun()
 
 
