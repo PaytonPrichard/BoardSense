@@ -112,7 +112,6 @@ def _run_profile_build(username: str, games: list, depth: int, platform: str, jo
 
         db.save_profile(username, profile, summaries)
         db.save_profile_history(username, profile, len(summaries))
-        db.save_active_user(username, platform)
 
         job["result"] = {"profile": profile, "summaries": summaries}
         job["status"] = "done"
@@ -593,38 +592,45 @@ _ACHIEVEMENTS = {
 if not st.session_state.get("_db_initialized"):
     try:
         db.init_db()
-        for _concept, _content in db.get_all_lessons().items():
-            _lk = f"concept_lesson_{_concept.lower()}"
-            if _lk not in st.session_state:
-                st.session_state[_lk] = _content
-        _ps = db.get_puzzle_stats()
-        st.session_state.setdefault("puzzle_streak",      _ps["streak"])
-        st.session_state.setdefault("puzzle_best_streak", _ps["best_streak"])
-        st.session_state.setdefault("puzzle_recent",      _ps["recent"])
-        # Load persisted phase results
-        _pps = db.get_puzzle_phase_stats()
-        if _pps:
-            _ppr_loaded: dict[str, list] = {}
-            for _ph, _st in _pps.items():
-                _ppr_loaded[_ph] = [True] * _st["correct"] + [False] * (_st["attempted"] - _st["correct"])
-            st.session_state.setdefault("puzzle_phase_results", _ppr_loaded)
     except Exception as _init_err:
         st.error(f"Database initialization issue: {_init_err}. Some features may be limited.")
         import traceback
         traceback.print_exc()
-    # Auto-load last active user's profile
-    _active = db.get_active_user()
-    if _active and "profile_data" not in st.session_state:
-        _au_user, _au_plat = _active
-        _au_saved = db.load_profile(_au_user)
-        if _au_saved:
-            _au_prof, _au_summ, _au_built = _au_saved
-            st.session_state.profile_data = _au_prof
-            st.session_state.profile_summaries = _au_summ
-            st.session_state.profile_username_built = _au_user
-            st.session_state.profile_platform = _au_plat
-            st.session_state.profile_username = _au_user
     st.session_state._db_initialized = True
+
+
+def _current_user() -> str:
+    """Return the current logged-in username (lowercase), or empty string."""
+    return st.session_state.get("profile_username_built", "")
+
+
+def _load_user_data(username: str):
+    """Load user-specific data from DB into session_state. Called after profile is established."""
+    if not username:
+        return
+    # Lessons
+    for _concept, _content in db.get_all_lessons(username).items():
+        _lk = f"concept_lesson_{_concept.lower()}"
+        if _lk not in st.session_state:
+            st.session_state[_lk] = _content
+    # Puzzle stats
+    _ps = db.get_puzzle_stats(username)
+    st.session_state["puzzle_streak"] = _ps["streak"]
+    st.session_state["puzzle_best_streak"] = _ps["best_streak"]
+    st.session_state["puzzle_recent"] = _ps["recent"]
+    # Phase results
+    _pps = db.get_puzzle_phase_stats(username)
+    if _pps:
+        _ppr_loaded: dict[str, list] = {}
+        for _ph, _st in _pps.items():
+            _ppr_loaded[_ph] = [True] * _st["correct"] + [False] * (_st["attempted"] - _st["correct"])
+        st.session_state["puzzle_phase_results"] = _ppr_loaded
+
+
+# Load user data if we already have a username (e.g., after profile build in same session)
+if _current_user() and not st.session_state.get("_user_data_loaded"):
+    _load_user_data(_current_user())
+    st.session_state._user_data_loaded = True
 
 # ── Daily puzzle counter ────────────────────────────────────────────────────
 from datetime import date as _date_cls
@@ -641,7 +647,8 @@ if "_session_start" not in st.session_state:
     st.session_state._session_puzzles = 0
     st.session_state._session_lessons = 0
     st.session_state._session_reviews = 0
-    _streak_info = db.update_login_streak()
+    _streak_user = _current_user()
+    _streak_info = db.update_login_streak(_streak_user) if _streak_user else {"current": 0, "longest": 0, "is_new_day": False}
     st.session_state._login_streak = _streak_info
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -1536,14 +1543,17 @@ def _check_achievement(key: str):
     """Check and unlock an achievement, showing a toast if newly unlocked."""
     if key not in _ACHIEVEMENTS:
         return
-    if db.unlock_achievement(key):
+    _u = _current_user()
+    if not _u:
+        return
+    if db.unlock_achievement(_u, key):
         ach = _ACHIEVEMENTS[key]
         st.toast(f"{ach['icon']} Achievement Unlocked: {ach['name']}")
 
 
 def _check_puzzle_achievements():
     """Check puzzle-related achievements after a puzzle solve."""
-    ps = db.get_puzzle_stats()
+    ps = db.get_puzzle_stats(_current_user())
     if ps["solved"] >= 1:
         _check_achievement("first_puzzle")
     if ps["solved"] >= 25:
@@ -1583,12 +1593,15 @@ def _get_daily_goals() -> tuple[dict, dict]:
     """Get or create today's daily goals. Returns (targets, progress)."""
     from datetime import date as _dg_date
     today = _dg_date.today().isoformat()
-    goals = db.get_daily_goals(today)
+    _u = _current_user()
+    if not _u:
+        return {"puzzles": 5, "lessons": 1, "review": 1}, {"puzzles": 0, "lessons": 0, "review": 0}
+    goals = db.get_daily_goals(_u, today)
     if goals:
         return goals["targets"], goals["progress"]
     targets = {"puzzles": 5, "lessons": 1, "review": 1}
     progress = {"puzzles": 0, "lessons": 0, "review": 0}
-    db.save_daily_goals(today, targets, progress)
+    db.save_daily_goals(_u, today, targets, progress)
     return targets, progress
 
 
@@ -1596,12 +1609,15 @@ def _increment_daily_goal(key: str, n: int = 1):
     """Increment a daily goal counter (thread-safe via DB-level locking)."""
     import json as _dg_json
     from datetime import date as _dg_date
+    _u = _current_user()
+    if not _u:
+        return
     today = _dg_date.today().isoformat()
     # Use a single atomic DB operation to read-modify-write
     with db._connect() as conn:
         row = conn.execute(
-            "SELECT targets_json, progress_json FROM daily_goals WHERE date=?",
-            (today,),
+            "SELECT targets_json, progress_json FROM daily_goals WHERE username=? AND date=?",
+            (_u, today),
         ).fetchone()
         if not row:
             targets = {"puzzles": 5, "lessons": 1, "review": 1}
@@ -1611,10 +1627,10 @@ def _increment_daily_goal(key: str, n: int = 1):
             progress = _dg_json.loads(row["progress_json"] or "{}")
         progress[key] = progress.get(key, 0) + n
         conn.execute(
-            "INSERT INTO daily_goals (date, targets_json, progress_json) "
-            "VALUES (?, ?, ?) ON CONFLICT(date) DO UPDATE SET "
+            "INSERT INTO daily_goals (username, date, targets_json, progress_json) "
+            "VALUES (?, ?, ?, ?) ON CONFLICT(username, date) DO UPDATE SET "
             "progress_json=excluded.progress_json",
-            (today, _dg_json.dumps(targets), _dg_json.dumps(progress)),
+            (_u, today, _dg_json.dumps(targets), _dg_json.dumps(progress)),
         )
 
 
@@ -2474,7 +2490,7 @@ def _render_concept_card(concept: dict, puzzle_count: int = 0):
             f'<span style="font-size:0.67em;color:#4fc3f7;white-space:nowrap;">'
             f'🧩 {puz_label} puzzle{"s" if puzzle_count != 1 else ""}</span>'
         )
-    _cscore = db.get_course_score(name)
+    _cscore = db.get_course_score(_current_user(), name)
     if _cscore:
         _s, _t = _cscore["score"], _cscore["total"]
         _sc_color = "#81c784" if _s == _t else "#ffb74d" if _s / _t >= 0.6 else "#e57373"
@@ -2485,7 +2501,7 @@ def _render_concept_card(concept: dict, puzzle_count: int = 0):
     # Concept mastery badge from puzzle performance
     _cm_all = st.session_state.get("_concept_mastery_cache")
     if _cm_all is None:
-        _cm_all = db.get_all_concept_mastery()
+        _cm_all = db.get_all_concept_mastery(_current_user())
         st.session_state["_concept_mastery_cache"] = _cm_all
     _cm_data = _cm_all.get(name)
     if _cm_data and _cm_data["attempted"] >= 2:
@@ -2950,7 +2966,7 @@ def _render_concept_detail(concept: str, *, show_header: bool = True):
             _ov_parts.append(f"{_ov_puz} practice puzzle{'s' if _ov_puz != 1 else ''}")
     # Read time from stored lesson
     _ov_lesson_key = f"concept_lesson_{concept.lower()}"
-    _ov_lesson_text = st.session_state.get(_ov_lesson_key) or db.get_lesson(concept) or ""
+    _ov_lesson_text = st.session_state.get(_ov_lesson_key) or db.get_lesson(_current_user(), concept) or ""
     if _ov_lesson_text:
         _ov_wc = len(_ov_lesson_text.split())
         _ov_mins = max(1, round(_ov_wc / 200))
@@ -2991,7 +3007,7 @@ def _render_concept_detail(concept: str, *, show_header: bool = True):
     # Lesson content — pull from DB if not already in session, then auto-generate
     lesson_key = f"concept_lesson_{concept.lower()}"
     if lesson_key not in st.session_state:
-        saved = db.get_lesson(concept)
+        saved = db.get_lesson(_current_user(), concept)
         if saved:
             st.session_state[lesson_key] = saved
 
@@ -3008,7 +3024,7 @@ def _render_concept_detail(concept: str, *, show_header: bool = True):
                 concept, examples, enriched_examples=_enriched if _enriched else None,
             )
             _count_lesson_gen()
-            db.save_lesson(concept, st.session_state[lesson_key])
+            db.save_lesson(_current_user(), concept, st.session_state[lesson_key])
             _check_achievement("first_lesson")
             _increment_daily_goal("lessons")
             st.session_state._session_lessons = st.session_state.get("_session_lessons", 0) + 1
@@ -3043,7 +3059,7 @@ def _render_concept_detail(concept: str, *, show_header: bool = True):
             concept, examples, enriched_examples=_enriched if _enriched else None,
         )
         _count_lesson_gen()
-        db.save_lesson(concept, st.session_state[lesson_key])
+        db.save_lesson(_current_user(), concept, st.session_state[lesson_key])
         st.rerun()
 
     if concept in _THEORY_ONLY_CONCEPTS:
@@ -3222,7 +3238,7 @@ def render_course_view():
         # Lesson content
         lesson_key = f"concept_lesson_{concept.lower()}"
         if lesson_key not in st.session_state:
-            saved = db.get_lesson(concept)
+            saved = db.get_lesson(_current_user(), concept)
             if saved:
                 st.session_state[lesson_key] = saved
 
@@ -3238,7 +3254,7 @@ def render_course_view():
                     concept, [], enriched_examples=_enriched if _enriched else None,
                 )
                 _count_lesson_gen()
-                db.save_lesson(concept, st.session_state[lesson_key])
+                db.save_lesson(_current_user(), concept, st.session_state[lesson_key])
 
         if lesson_key in st.session_state:
             with lesson_area.container():
@@ -3302,7 +3318,7 @@ def render_course_view():
         pct = round(100 * n_correct / total) if total else 0
 
         # Persist course score
-        db.save_course_score(concept, n_correct, total)
+        db.save_course_score(_current_user(), concept, n_correct, total)
         if n_correct == total and total >= 5:
             _check_achievement("perfect_course")
 
@@ -3531,7 +3547,7 @@ def _bulk_generate_lessons(concepts: list[dict]):
         lk = f"concept_lesson_{c['name'].lower()}"
         if lk in st.session_state:
             continue
-        saved = db.get_lesson(c["name"])
+        saved = db.get_lesson(_current_user(), c["name"])
         if saved:
             st.session_state[lk] = saved
             continue
@@ -3562,7 +3578,7 @@ def _bulk_generate_lessons(concepts: list[dict]):
             enriched_examples=_enriched if _enriched else None,
         )
         _count_lesson_gen()
-        db.save_lesson(c["name"], lesson)
+        db.save_lesson(_current_user(), c["name"], lesson)
         st.session_state[f"concept_lesson_{c['name'].lower()}"] = lesson
 
     progress.progress(1.0, text="All lessons ready!")
@@ -4442,7 +4458,7 @@ def _render_ttr_module_flow():
         db_key = f"ttr:{mid}"
 
         if lesson_key not in st.session_state:
-            saved = db.get_lesson(db_key)
+            saved = db.get_lesson(_current_user(), db_key)
             if saved:
                 st.session_state[lesson_key] = saved
 
@@ -4457,7 +4473,7 @@ def _render_ttr_module_flow():
             st.session_state[lesson_key] = generate_ranked_lesson(
                 concept, rating_band,
             )
-            db.save_lesson(db_key, st.session_state[lesson_key])
+            db.save_lesson(_current_user(), db_key, st.session_state[lesson_key])
 
         with lesson_area.container():
             _lt, _, _ = parse_lesson_diagrams(st.session_state[lesson_key])
@@ -5092,7 +5108,7 @@ def render_puzzles_tab():
     if _puz_ac:
         new_streak = st.session_state.get("puzzle_streak", 0) + 1
         new_recent = (st.session_state.get("puzzle_recent", []) + [True])[-10:]
-        db.update_puzzle_result(True, new_streak, new_recent)
+        db.update_puzzle_result(_current_user(), True, new_streak, new_recent)
         st.session_state.puzzle_streak      = new_streak
         st.session_state.puzzle_best_streak = max(
             st.session_state.get("puzzle_best_streak", 0), new_streak
@@ -5101,9 +5117,9 @@ def render_puzzles_tab():
         _phase = puzzle.get("phase", "middlegame")
         _ppr = st.session_state.setdefault("puzzle_phase_results", {})
         _ppr.setdefault(_phase, []).append(True)
-        db.update_puzzle_phase(_phase, True)
+        db.update_puzzle_phase(_current_user(), _phase, True)
         for _pc in puzzle.get("concepts", []):
-            db.update_concept_mastery(_pc, True)
+            db.update_concept_mastery(_current_user(), _pc, True)
         st.session_state.puzzles_solved_today = st.session_state.get("puzzles_solved_today", 0) + 1
         st.session_state.puzzle_correct_today = st.session_state.get("puzzle_correct_today", 0) + 1
         st.session_state.puzzle_explanation_pending = True
@@ -5114,15 +5130,15 @@ def render_puzzles_tab():
         st.rerun()
     if _puz_aw:
         new_recent = (st.session_state.get("puzzle_recent", []) + [False])[-10:]
-        db.update_puzzle_result(False, 0, new_recent)
+        db.update_puzzle_result(_current_user(), False, 0, new_recent)
         st.session_state.puzzle_streak = 0
         st.session_state.puzzle_recent = new_recent
         _phase = puzzle.get("phase", "middlegame")
         _ppr = st.session_state.setdefault("puzzle_phase_results", {})
         _ppr.setdefault(_phase, []).append(False)
-        db.update_puzzle_phase(_phase, False)
+        db.update_puzzle_phase(_current_user(), _phase, False)
         for _pc in puzzle.get("concepts", []):
-            db.update_concept_mastery(_pc, False)
+            db.update_concept_mastery(_current_user(), _pc, False)
         st.session_state.puzzles_solved_today = st.session_state.get("puzzles_solved_today", 0) + 1
         st.session_state.puzzle_explanation_pending = True
         st.session_state.puzzle_explanation_correct = False
@@ -5734,17 +5750,12 @@ def _check_build_progress():
     """
     username = st.session_state.get("_build_username")
 
-    # Reconnect after page refresh: check _BUILD_JOBS for the active DB user
+    # Reconnect after page refresh: check _BUILD_JOBS for any matching user
     if not username:
-        try:
-            active = db.get_active_user()
-        except Exception:
-            active = None
-        if active:
-            active_name = active[0] if isinstance(active, (list, tuple)) else active
-            if active_name in _BUILD_JOBS:
-                username = active_name
-                st.session_state["_build_username"] = username
+        _cu = _current_user()
+        if _cu and _cu in _BUILD_JOBS:
+            username = _cu
+            st.session_state["_build_username"] = username
 
     if not username or username not in _BUILD_JOBS:
         return None
@@ -5762,6 +5773,9 @@ def _check_build_progress():
         ng_key = job.get("ng_cache_key")
         if ng_key:
             st.session_state.pop(ng_key, None)
+        # Load user-specific data from DB
+        _load_user_data(username)
+        st.session_state._user_data_loaded = True
         # Clean up
         st.session_state.pop("_build_username", None)
         with _BUILD_LOCK:
@@ -8192,7 +8206,7 @@ def _generate_profile_report() -> str:
                 lines.append(f"  {op}: {od['n']} games, {wr}% win rate")
 
     # Achievements
-    unlocked = db.get_achievements()
+    unlocked = db.get_achievements(_current_user())
     if unlocked:
         lines += ["", "ACHIEVEMENTS UNLOCKED", "-" * 30]
         for key in unlocked:
@@ -8285,7 +8299,7 @@ def _render_session_analytics():
         ), unsafe_allow_html=True)
 
     # Weekly activity chart (from DB)
-    stats = db.get_session_stats(days=7)
+    stats = db.get_session_stats(_current_user(), days=7)
     if stats:
         from datetime import date, timedelta
         today = date.today()
@@ -8602,7 +8616,7 @@ def render_dashboard_tab():
     _next_nav_concept = None
 
     # Check review-due concepts first (time-sensitive)
-    _rd = db.get_review_due_concepts(days=3, threshold=0.8)
+    _rd = db.get_review_due_concepts(_current_user(), days=3, threshold=0.8)
     if _rd:
         _next_action = f"Review: {_rd[0]['concept']} — scored {_rd[0]['score']}/{_rd[0]['total']} last time"
         _next_nav = "navigate_to_coaching"
@@ -8611,7 +8625,7 @@ def render_dashboard_tab():
         # Check concept mastery — find weakest practiced concept
         _cm_all = st.session_state.get("_concept_mastery_cache")
         if _cm_all is None:
-            _cm_all = db.get_all_concept_mastery()
+            _cm_all = db.get_all_concept_mastery(_current_user())
             st.session_state["_concept_mastery_cache"] = _cm_all
         _weak_concepts = [
             (name, data) for name, data in _cm_all.items()
@@ -8691,7 +8705,7 @@ def render_dashboard_tab():
     _render_session_analytics()
 
     # ── Achievements ──────────────────────────────────────────────────────────
-    _unlocked = db.get_achievements()
+    _unlocked = db.get_achievements(_current_user())
     st.markdown(
         '<div style="font-size:0.7em;color:#4a6080;font-weight:700;letter-spacing:0.1em;'
         'text-transform:uppercase;margin:16px 0 10px;">ACHIEVEMENTS</div>',
@@ -9028,7 +9042,7 @@ def render_dashboard_tab():
                 'Start training to track progress</div>'
             )
         # Check for review-due items and append a small note
-        _review_due = db.get_review_due_concepts(days=3, threshold=0.8)
+        _review_due = db.get_review_due_concepts(_current_user(), days=3, threshold=0.8)
         if _review_due:
             _courses_html += (
                 f'<div style="font-size:0.72em;color:#ffb74d;margin-top:8px;font-weight:600;">'
@@ -9448,11 +9462,12 @@ def render_profile_tab():
             st.session_state.profile_summaries      = p_summaries
             st.session_state.profile_built_at       = built_at
             st.session_state.profile_username_built = username_now
-            db.save_active_user(username_now, profile_platform)
+            _load_user_data(username_now)
+            st.session_state._user_data_loaded = True
         else:
             st.info(
                 "Enter your username and click "
-                "**▶ Build Profile** to generate your personalised coaching profile."
+                "**⚡ Analyze Games** to generate your personalised coaching profile."
             )
             return
 
@@ -9487,7 +9502,7 @@ def render_profile_tab():
         st.markdown(
             f'<div style="text-align:right;font-size:0.72em;color:#4a6a7a;margin-bottom:10px;">'
             f'↺ Restored from last build &nbsp;·&nbsp; {built_at_str}'
-            f'&nbsp;&nbsp;<span style="color:#2a4a5a;">— click ▶ Build Profile to refresh</span>'
+            f'&nbsp;&nbsp;<span style="color:#2a4a5a;">— click ⚡ Analyze Games to refresh</span>'
             f'</div>',
             unsafe_allow_html=True,
         )
@@ -10276,7 +10291,7 @@ with _hdr_right:
                     _rc1, _rc2 = st.columns(2)
                     with _rc1:
                         if st.button("Confirm", key="hdr_reset_yes", type="primary", use_container_width=True):
-                            db.reset_training_progress()
+                            db.reset_training_progress(_current_user())
                             # Clear session-state training data
                             for _k in ["puzzle_queue", "puzzle_idx", "puzzle_streak",
                                         "puzzle_best_streak", "puzzle_recent",
@@ -10300,14 +10315,14 @@ with _hdr_right:
                     # Save session stats before clearing
                     import time as _logout_time
                     _sess_dur = int(_logout_time.time() - st.session_state.get("_session_start", _logout_time.time()))
-                    if _sess_dur > 10:  # Only save if session was meaningful
+                    if _sess_dur > 10 and _current_user():  # Only save if session was meaningful
                         db.save_session_stats(
+                            _current_user(),
                             _sess_dur,
                             st.session_state.get("_session_puzzles", 0),
                             st.session_state.get("_session_lessons", 0),
                             st.session_state.get("_session_reviews", 0),
                         )
-                    db.clear_active_user()
                     # Keys to preserve across logout (UI prefs only)
                     _keep = {
                         "board_theme", "piece_set", "board_square_size",

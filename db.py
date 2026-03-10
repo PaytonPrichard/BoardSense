@@ -1,6 +1,8 @@
 """
 BoardSense — db.py
 SQLite persistence layer for games, concepts, and lessons.
+
+All per-user tables are scoped by username to support multi-user deployments.
 """
 
 import sqlite3
@@ -11,6 +13,9 @@ DB_PATH = Path(__file__).parent / "chesstutor.db"
 
 _MAX_RETRIES = 3
 _RETRY_DELAY = 0.5  # seconds
+
+# Schema version — bump when tables change to trigger migration
+_SCHEMA_VERSION = 2
 
 
 def _connect() -> sqlite3.Connection:
@@ -80,24 +85,6 @@ def _init_db_inner():
                 classification TEXT
             );
 
-            CREATE TABLE IF NOT EXISTS lessons (
-                concept    TEXT PRIMARY KEY,
-                content    TEXT,
-                updated_at TEXT DEFAULT (datetime('now'))
-            );
-
-            CREATE TABLE IF NOT EXISTS puzzle_stats (
-                id          INTEGER PRIMARY KEY CHECK (id = 1),
-                rating      REAL    DEFAULT 1200.0,
-                solved      INTEGER DEFAULT 0,
-                attempted   INTEGER DEFAULT 0,
-                streak      INTEGER DEFAULT 0,
-                best_streak INTEGER DEFAULT 0,
-                recent_json TEXT    DEFAULT '[]',
-                updated_at  TEXT    DEFAULT (datetime('now'))
-            );
-            INSERT OR IGNORE INTO puzzle_stats (id) VALUES (1);
-
             CREATE TABLE IF NOT EXISTS profiles (
                 username       TEXT PRIMARY KEY,
                 profile_json   TEXT,
@@ -114,12 +101,6 @@ def _init_db_inner():
                 n_games     INTEGER,
                 record_json TEXT DEFAULT '{}',
                 built_at    TEXT DEFAULT (datetime('now'))
-            );
-
-            CREATE TABLE IF NOT EXISTS puzzle_phase_stats (
-                phase      TEXT PRIMARY KEY,
-                correct    INTEGER DEFAULT 0,
-                attempted  INTEGER DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS curriculum_progress (
@@ -141,63 +122,26 @@ def _init_db_inner():
                 PRIMARY KEY (client_id, date)
             );
 
-            CREATE TABLE IF NOT EXISTS active_session (
-                id       INTEGER PRIMARY KEY CHECK (id = 1),
-                username TEXT,
-                platform TEXT DEFAULT 'Chess.com'
-            );
-
-            CREATE TABLE IF NOT EXISTS course_scores (
-                concept      TEXT PRIMARY KEY,
-                score        INTEGER,
-                total        INTEGER,
-                completed_at TEXT DEFAULT (datetime('now'))
-            );
-
-            CREATE TABLE IF NOT EXISTS achievements (
-                key         TEXT PRIMARY KEY,
-                unlocked_at TEXT DEFAULT (datetime('now'))
-            );
-
-            CREATE TABLE IF NOT EXISTS daily_goals (
-                date          TEXT PRIMARY KEY,
-                targets_json  TEXT,
-                progress_json TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS session_stats (
-                id            INTEGER PRIMARY KEY AUTOINCREMENT,
-                session_date  TEXT,
-                duration_secs INTEGER DEFAULT 0,
-                puzzles       INTEGER DEFAULT 0,
-                lessons       INTEGER DEFAULT 0,
-                reviews       INTEGER DEFAULT 0,
-                started_at    TEXT DEFAULT (datetime('now'))
-            );
-
-            CREATE TABLE IF NOT EXISTS streaks (
-                id            INTEGER PRIMARY KEY CHECK (id = 1),
-                current       INTEGER DEFAULT 0,
-                longest       INTEGER DEFAULT 0,
-                last_date     TEXT
-            );
-            INSERT OR IGNORE INTO streaks (id) VALUES (1);
-
-            CREATE TABLE IF NOT EXISTS concept_mastery (
-                concept    TEXT PRIMARY KEY,
-                correct    INTEGER DEFAULT 0,
-                attempted  INTEGER DEFAULT 0,
-                last_at    TEXT
+            CREATE TABLE IF NOT EXISTS schema_version (
+                id      INTEGER PRIMARY KEY CHECK (id = 1),
+                version INTEGER DEFAULT 1
             );
         """)
-        # Migration: add recent_json column to existing DBs (safe no-op if already present)
-        try:
+
+        # ── Check schema version and migrate if needed ─────────────────────
+        row = conn.execute(
+            "SELECT version FROM schema_version WHERE id=1"
+        ).fetchone()
+        current_version = row["version"] if row else 0
+
+        if current_version < _SCHEMA_VERSION:
+            _migrate_to_v2(conn)
             conn.execute(
-                "ALTER TABLE puzzle_stats ADD COLUMN recent_json TEXT DEFAULT '[]'"
+                "INSERT INTO schema_version (id, version) VALUES (1, ?) "
+                "ON CONFLICT(id) DO UPDATE SET version=excluded.version",
+                (_SCHEMA_VERSION,),
             )
-        except Exception:
-            pass
-        # Migration: add record_json column to profile_history
+        # Legacy migration: add record_json column to profile_history
         try:
             conn.execute(
                 "ALTER TABLE profile_history ADD COLUMN record_json TEXT DEFAULT '{}'"
@@ -205,6 +149,104 @@ def _init_db_inner():
         except Exception:
             pass
 
+
+def _migrate_to_v2(conn: sqlite3.Connection):
+    """Migrate from v1 (singleton tables) to v2 (username-scoped tables).
+
+    Drops and recreates affected tables. On Streamlit Cloud the DB is
+    ephemeral anyway; locally users just rebuild their profile.
+    """
+    # Drop old singleton / unscoped tables and recreate with username
+    _old_tables = [
+        "puzzle_stats", "puzzle_phase_stats", "streaks", "course_scores",
+        "achievements", "daily_goals", "session_stats", "concept_mastery",
+        "lessons", "active_session",
+    ]
+    for t in _old_tables:
+        conn.execute(f"DROP TABLE IF EXISTS {t}")
+
+    conn.executescript("""
+        CREATE TABLE lessons (
+            username   TEXT,
+            concept    TEXT,
+            content    TEXT,
+            updated_at TEXT DEFAULT (datetime('now')),
+            PRIMARY KEY (username, concept)
+        );
+
+        CREATE TABLE puzzle_stats (
+            username    TEXT PRIMARY KEY,
+            rating      REAL    DEFAULT 1200.0,
+            solved      INTEGER DEFAULT 0,
+            attempted   INTEGER DEFAULT 0,
+            streak      INTEGER DEFAULT 0,
+            best_streak INTEGER DEFAULT 0,
+            recent_json TEXT    DEFAULT '[]',
+            updated_at  TEXT    DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE puzzle_phase_stats (
+            username   TEXT,
+            phase      TEXT,
+            correct    INTEGER DEFAULT 0,
+            attempted  INTEGER DEFAULT 0,
+            PRIMARY KEY (username, phase)
+        );
+
+        CREATE TABLE streaks (
+            username  TEXT PRIMARY KEY,
+            current   INTEGER DEFAULT 0,
+            longest   INTEGER DEFAULT 0,
+            last_date TEXT
+        );
+
+        CREATE TABLE course_scores (
+            username     TEXT,
+            concept      TEXT,
+            score        INTEGER,
+            total        INTEGER,
+            completed_at TEXT DEFAULT (datetime('now')),
+            PRIMARY KEY (username, concept)
+        );
+
+        CREATE TABLE achievements (
+            username    TEXT,
+            key         TEXT,
+            unlocked_at TEXT DEFAULT (datetime('now')),
+            PRIMARY KEY (username, key)
+        );
+
+        CREATE TABLE daily_goals (
+            username      TEXT,
+            date          TEXT,
+            targets_json  TEXT,
+            progress_json TEXT,
+            PRIMARY KEY (username, date)
+        );
+
+        CREATE TABLE session_stats (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            username      TEXT,
+            session_date  TEXT,
+            duration_secs INTEGER DEFAULT 0,
+            puzzles       INTEGER DEFAULT 0,
+            lessons       INTEGER DEFAULT 0,
+            reviews       INTEGER DEFAULT 0,
+            started_at    TEXT DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE concept_mastery (
+            username   TEXT,
+            concept    TEXT,
+            correct    INTEGER DEFAULT 0,
+            attempted  INTEGER DEFAULT 0,
+            last_at    TEXT,
+            PRIMARY KEY (username, concept)
+        );
+    """)
+
+
+# ── Game persistence ────────────────────────────────────────────────────────
 
 def save_game(
     pgn_text: str,
@@ -276,30 +318,39 @@ def save_concept(
             )
 
 
-def save_lesson(concept: str, content: str):
+# ── Lessons (username-scoped) ───────────────────────────────────────────────
+
+def save_lesson(username: str, concept: str, content: str):
     """Upsert a Claude-generated lesson."""
+    key = username.strip().lower()
     with _connect() as conn:
         conn.execute(
-            "INSERT INTO lessons (concept, content, updated_at) VALUES (?,?,datetime('now')) "
-            "ON CONFLICT(concept) DO UPDATE SET "
+            "INSERT INTO lessons (username, concept, content, updated_at) "
+            "VALUES (?,?,?,datetime('now')) "
+            "ON CONFLICT(username, concept) DO UPDATE SET "
             "content=excluded.content, updated_at=excluded.updated_at",
-            (concept, content),
+            (key, concept, content),
         )
 
 
-def get_lesson(concept: str) -> str | None:
+def get_lesson(username: str, concept: str) -> str | None:
     """Retrieve saved lesson text, or None if not yet generated."""
+    key = username.strip().lower()
     with _connect() as conn:
         row = conn.execute(
-            "SELECT content FROM lessons WHERE concept=? COLLATE NOCASE", (concept,)
+            "SELECT content FROM lessons WHERE username=? AND concept=? COLLATE NOCASE",
+            (key, concept),
         ).fetchone()
     return row["content"] if row else None
 
 
-def get_all_lessons() -> dict[str, str]:
-    """Return {concept: content} for every saved lesson."""
+def get_all_lessons(username: str) -> dict[str, str]:
+    """Return {concept: content} for every saved lesson for this user."""
+    key = username.strip().lower()
     with _connect() as conn:
-        rows = conn.execute("SELECT concept, content FROM lessons").fetchall()
+        rows = conn.execute(
+            "SELECT concept, content FROM lessons WHERE username=?", (key,)
+        ).fetchall()
     return {r["concept"]: r["content"] for r in rows}
 
 
@@ -357,6 +408,8 @@ def get_recent_games(limit: int = 10) -> list[dict]:
         ).fetchall()
     return [dict(r) for r in rows]
 
+
+# ── Profile persistence ─────────────────────────────────────────────────────
 
 def save_profile(username: str, profile: dict, summaries: list) -> None:
     """
@@ -449,62 +502,81 @@ def load_profile(username: str) -> tuple | None:
     return profile, summaries, row["built_at"]
 
 
-def get_puzzle_stats() -> dict:
+# ── Puzzle stats (username-scoped) ──────────────────────────────────────────
+
+def get_puzzle_stats(username: str) -> dict:
     """Return the player's puzzle performance counters including last-10 results."""
     import json
+    key = username.strip().lower()
+    _defaults = {"rating": 1200.0, "solved": 0, "attempted": 0, "streak": 0,
+                 "best_streak": 0, "recent": []}
+    if not key:
+        return _defaults
     with _connect() as conn:
         row = conn.execute(
             "SELECT rating, solved, attempted, streak, best_streak, recent_json "
-            "FROM puzzle_stats WHERE id=1"
+            "FROM puzzle_stats WHERE username=?", (key,)
         ).fetchone()
     if not row:
-        return {"rating": 1200.0, "solved": 0, "attempted": 0, "streak": 0,
-                "best_streak": 0, "recent": []}
+        return _defaults
     d = dict(row)
     try:
         d["recent"] = json.loads(d.pop("recent_json") or "[]")
     except Exception:
         d["recent"] = []
+    d.pop("username", None)
     return d
 
 
-def update_puzzle_result(correct: bool, new_streak: int, recent: list) -> None:
+def update_puzzle_result(username: str, correct: bool, new_streak: int, recent: list) -> None:
     """Record the result of one puzzle attempt (last 10 stored as JSON)."""
     import json
+    key = username.strip().lower()
+    if not key:
+        return
     recent_json = json.dumps(recent[-10:])
     with _connect() as conn:
         conn.execute(
-            """UPDATE puzzle_stats
-               SET solved      = solved + ?,
-                   attempted   = attempted + 1,
+            """INSERT INTO puzzle_stats (username, rating, solved, attempted, streak, best_streak, recent_json, updated_at)
+               VALUES (?, 1200.0, ?, 1, ?, ?, ?, datetime('now'))
+               ON CONFLICT(username) DO UPDATE SET
+                   solved      = puzzle_stats.solved + ?,
+                   attempted   = puzzle_stats.attempted + 1,
                    streak      = ?,
-                   best_streak = MAX(best_streak, ?),
+                   best_streak = MAX(puzzle_stats.best_streak, ?),
                    recent_json = ?,
-                   updated_at  = datetime('now')
-               WHERE id = 1""",
-            (1 if correct else 0, new_streak, new_streak, recent_json),
+                   updated_at  = datetime('now')""",
+            (key, 1 if correct else 0, new_streak, new_streak, recent_json,
+             1 if correct else 0, new_streak, new_streak, recent_json),
         )
 
 
-# ── Puzzle phase tracking ────────────────────────────────────────────────────
+# ── Puzzle phase tracking (username-scoped) ─────────────────────────────────
 
-def update_puzzle_phase(phase: str, correct: bool) -> None:
+def update_puzzle_phase(username: str, phase: str, correct: bool) -> None:
     """Increment phase-level puzzle stats."""
+    key = username.strip().lower()
+    if not key:
+        return
     with _connect() as conn:
         conn.execute(
-            "INSERT INTO puzzle_phase_stats (phase, correct, attempted) VALUES (?, ?, 1) "
-            "ON CONFLICT(phase) DO UPDATE SET "
+            "INSERT INTO puzzle_phase_stats (username, phase, correct, attempted) VALUES (?, ?, ?, 1) "
+            "ON CONFLICT(username, phase) DO UPDATE SET "
             "correct = puzzle_phase_stats.correct + excluded.correct, "
             "attempted = puzzle_phase_stats.attempted + 1",
-            (phase, 1 if correct else 0),
+            (key, phase, 1 if correct else 0),
         )
 
 
-def get_puzzle_phase_stats() -> dict[str, dict]:
+def get_puzzle_phase_stats(username: str) -> dict[str, dict]:
     """Return {phase: {correct, attempted}} for all phases."""
+    key = username.strip().lower()
+    if not key:
+        return {}
     with _connect() as conn:
         rows = conn.execute(
-            "SELECT phase, correct, attempted FROM puzzle_phase_stats"
+            "SELECT phase, correct, attempted FROM puzzle_phase_stats WHERE username=?",
+            (key,),
         ).fetchall()
     return {r["phase"]: {"correct": r["correct"], "attempted": r["attempted"]} for r in rows}
 
@@ -580,82 +652,68 @@ def increment_generation_count(client_id: str, n: int = 1) -> int:
     return row["count"] if row else n
 
 
-# ── Course score persistence ─────────────────────────────────────────────────
+# ── Course score persistence (username-scoped) ──────────────────────────────
 
-def save_course_score(concept: str, score: int, total: int) -> None:
+def save_course_score(username: str, concept: str, score: int, total: int) -> None:
     """Upsert the latest course score for a concept."""
+    key = username.strip().lower()
+    if not key:
+        return
     with _connect() as conn:
         conn.execute(
-            "INSERT INTO course_scores (concept, score, total, completed_at) "
-            "VALUES (?, ?, ?, datetime('now')) "
-            "ON CONFLICT(concept) DO UPDATE SET "
+            "INSERT INTO course_scores (username, concept, score, total, completed_at) "
+            "VALUES (?, ?, ?, ?, datetime('now')) "
+            "ON CONFLICT(username, concept) DO UPDATE SET "
             "score=excluded.score, total=excluded.total, completed_at=excluded.completed_at",
-            (concept, score, total),
+            (key, concept, score, total),
         )
 
 
-def get_course_score(concept: str) -> dict | None:
+def get_course_score(username: str, concept: str) -> dict | None:
     """Return {score, total, completed_at} for a concept, or None."""
+    key = username.strip().lower()
+    if not key:
+        return None
     with _connect() as conn:
         row = conn.execute(
-            "SELECT score, total, completed_at FROM course_scores WHERE concept=? COLLATE NOCASE",
-            (concept,),
+            "SELECT score, total, completed_at FROM course_scores "
+            "WHERE username=? AND concept=? COLLATE NOCASE",
+            (key, concept),
         ).fetchone()
     if row:
         return {"score": row["score"], "total": row["total"], "completed_at": row["completed_at"]}
     return None
 
 
-def get_review_due_concepts(days: int = 3, threshold: float = 0.8) -> list[dict]:
+def get_review_due_concepts(username: str, days: int = 3, threshold: float = 0.8) -> list[dict]:
     """Return concepts studied 3+ days ago with score below threshold."""
+    key = username.strip().lower()
+    if not key:
+        return []
     with _connect() as conn:
         rows = conn.execute(
             "SELECT concept, score, total, completed_at FROM course_scores "
-            "WHERE completed_at <= datetime('now', ? || ' days') AND "
+            "WHERE username=? AND completed_at <= datetime('now', ? || ' days') AND "
             "CAST(score AS REAL) / CAST(total AS REAL) < ?",
-            (f"-{days}", threshold),
+            (key, f"-{days}", threshold),
         ).fetchall()
     return [dict(r) for r in rows]
 
 
-# ── Active session persistence ───────────────────────────────────────────────
+# ── Reset training progress (username-scoped) ───────────────────────────────
 
-def save_active_user(username: str, platform: str = "Chess.com") -> None:
-    """Remember the logged-in user across page refreshes."""
+def reset_training_progress(username: str) -> None:
+    """Clear training progress for a specific user only."""
     key = username.strip().lower()
+    if not key:
+        return
     with _connect() as conn:
-        conn.execute(
-            "INSERT INTO active_session (id, username, platform) VALUES (1, ?, ?) "
-            "ON CONFLICT(id) DO UPDATE SET username=excluded.username, platform=excluded.platform",
-            (key, platform),
-        )
-
-
-def get_active_user() -> tuple[str, str] | None:
-    """Return (username, platform) if a user was previously logged in, else None."""
-    with _connect() as conn:
-        row = conn.execute(
-            "SELECT username, platform FROM active_session WHERE id=1"
-        ).fetchone()
-    if row and row["username"]:
-        return row["username"], row["platform"]
-    return None
-
-
-def clear_active_user() -> None:
-    """Log out — remove the saved active user."""
-    with _connect() as conn:
-        conn.execute("DELETE FROM active_session WHERE id=1")
-
-
-def reset_training_progress() -> None:
-    """Clear all training progress: lessons, puzzle stats, course scores, curriculum, phase stats."""
-    with _connect() as conn:
-        conn.execute("DELETE FROM lessons")
-        conn.execute("DELETE FROM course_scores")
-        conn.execute("DELETE FROM curriculum_progress")
-        conn.execute("DELETE FROM puzzle_phase_stats")
-        conn.execute("UPDATE puzzle_stats SET solved=0, attempted=0, streak=0, best_streak=0, recent_json='[]' WHERE id=1")
+        conn.execute("DELETE FROM lessons WHERE username=?", (key,))
+        conn.execute("DELETE FROM course_scores WHERE username=?", (key,))
+        conn.execute("DELETE FROM curriculum_progress WHERE username=? COLLATE NOCASE", (key,))
+        conn.execute("DELETE FROM puzzle_phase_stats WHERE username=?", (key,))
+        conn.execute("DELETE FROM puzzle_stats WHERE username=?", (key,))
+        conn.execute("DELETE FROM concept_mastery WHERE username=?", (key,))
 
 
 def get_stage_completion(username: str, stage: int) -> tuple[int, int]:
@@ -674,34 +732,46 @@ def get_stage_completion(username: str, stage: int) -> tuple[int, int]:
     return (row["cnt"] if row else 0, total_modules)
 
 
-# ── Achievements ─────────────────────────────────────────────────────────────
+# ── Achievements (username-scoped) ──────────────────────────────────────────
 
-def unlock_achievement(key: str) -> bool:
+def unlock_achievement(username: str, key: str) -> bool:
     """Insert achievement if not exists. Return True if newly unlocked."""
+    ukey = username.strip().lower()
+    if not ukey:
+        return False
     with _connect() as conn:
         cur = conn.execute(
-            "INSERT OR IGNORE INTO achievements (key, unlocked_at) VALUES (?, datetime('now'))",
-            (key,),
+            "INSERT OR IGNORE INTO achievements (username, key, unlocked_at) "
+            "VALUES (?, ?, datetime('now'))",
+            (ukey, key),
         )
     return cur.rowcount > 0
 
 
-def get_achievements() -> dict[str, str]:
+def get_achievements(username: str) -> dict[str, str]:
     """Return {key: unlocked_at} for all unlocked achievements."""
+    ukey = username.strip().lower()
+    if not ukey:
+        return {}
     with _connect() as conn:
-        rows = conn.execute("SELECT key, unlocked_at FROM achievements").fetchall()
+        rows = conn.execute(
+            "SELECT key, unlocked_at FROM achievements WHERE username=?", (ukey,)
+        ).fetchall()
     return {r["key"]: r["unlocked_at"] for r in rows}
 
 
-# ── Daily Goals ──────────────────────────────────────────────────────────────
+# ── Daily Goals (username-scoped) ───────────────────────────────────────────
 
-def get_daily_goals(date: str) -> dict | None:
+def get_daily_goals(username: str, date: str) -> dict | None:
     """Return {targets, progress} for a given date, or None."""
     import json
+    key = username.strip().lower()
+    if not key:
+        return None
     with _connect() as conn:
         row = conn.execute(
-            "SELECT targets_json, progress_json FROM daily_goals WHERE date=?",
-            (date,),
+            "SELECT targets_json, progress_json FROM daily_goals WHERE username=? AND date=?",
+            (key, date),
         ).fetchone()
     if not row:
         return None
@@ -711,53 +781,68 @@ def get_daily_goals(date: str) -> dict | None:
     }
 
 
-def save_daily_goals(date: str, targets: dict, progress: dict):
+def save_daily_goals(username: str, date: str, targets: dict, progress: dict):
     """Upsert daily goals for a date."""
     import json
+    key = username.strip().lower()
+    if not key:
+        return
     with _connect() as conn:
         conn.execute(
-            "INSERT INTO daily_goals (date, targets_json, progress_json) "
-            "VALUES (?, ?, ?) ON CONFLICT(date) DO UPDATE SET "
+            "INSERT INTO daily_goals (username, date, targets_json, progress_json) "
+            "VALUES (?, ?, ?, ?) ON CONFLICT(username, date) DO UPDATE SET "
             "targets_json=excluded.targets_json, progress_json=excluded.progress_json",
-            (date, json.dumps(targets), json.dumps(progress)),
+            (key, date, json.dumps(targets), json.dumps(progress)),
         )
 
 
-# ── Session Stats ────────────────────────────────────────────────────────────
+# ── Session Stats (username-scoped) ─────────────────────────────────────────
 
-def save_session_stats(duration_secs: int, puzzles: int, lessons: int, reviews: int):
+def save_session_stats(username: str, duration_secs: int, puzzles: int, lessons: int, reviews: int):
     """Record a session's activity stats."""
     from datetime import date
+    key = username.strip().lower()
+    if not key:
+        return
     with _connect() as conn:
         conn.execute(
-            "INSERT INTO session_stats (session_date, duration_secs, puzzles, lessons, reviews) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (date.today().isoformat(), duration_secs, puzzles, lessons, reviews),
+            "INSERT INTO session_stats (username, session_date, duration_secs, puzzles, lessons, reviews) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (key, date.today().isoformat(), duration_secs, puzzles, lessons, reviews),
         )
 
 
-def get_session_stats(days: int = 30) -> list[dict]:
+def get_session_stats(username: str, days: int = 30) -> list[dict]:
     """Return session stats for the last N days, newest first."""
+    key = username.strip().lower()
+    if not key:
+        return []
     with _connect() as conn:
         rows = conn.execute(
             "SELECT session_date, SUM(duration_secs) as total_secs, "
             "SUM(puzzles) as puzzles, SUM(lessons) as lessons, SUM(reviews) as reviews "
             "FROM session_stats "
-            "WHERE session_date >= date('now', ? || ' days') "
+            "WHERE username=? AND session_date >= date('now', ? || ' days') "
             "GROUP BY session_date ORDER BY session_date DESC",
-            (f"-{days}",),
+            (key, f"-{days}"),
         ).fetchall()
     return [dict(r) for r in rows]
 
 
-# ── Login Streaks ────────────────────────────────────────────────────────────
+# ── Login Streaks (username-scoped) ─────────────────────────────────────────
 
-def update_login_streak() -> dict:
+def update_login_streak(username: str) -> dict:
     """Update the daily login streak. Returns {current, longest, is_new_day}."""
     from datetime import date, timedelta
+    key = username.strip().lower()
+    _defaults = {"current": 0, "longest": 0, "is_new_day": False}
+    if not key:
+        return _defaults
     today = date.today().isoformat()
     with _connect() as conn:
-        row = conn.execute("SELECT current, longest, last_date FROM streaks WHERE id=1").fetchone()
+        row = conn.execute(
+            "SELECT current, longest, last_date FROM streaks WHERE username=?", (key,)
+        ).fetchone()
         current = row["current"] if row else 0
         longest = row["longest"] if row else 0
         last_date = row["last_date"] if row else None
@@ -771,31 +856,57 @@ def update_login_streak() -> dict:
                 current = 1
             longest = max(longest, current)
             conn.execute(
-                "UPDATE streaks SET current=?, longest=?, last_date=? WHERE id=1",
-                (current, longest, today),
+                "INSERT INTO streaks (username, current, longest, last_date) "
+                "VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(username) DO UPDATE SET "
+                "current=excluded.current, longest=excluded.longest, last_date=excluded.last_date",
+                (key, current, longest, today),
             )
     return {"current": current, "longest": longest, "is_new_day": is_new_day}
 
 
-def update_concept_mastery(concept: str, correct: bool) -> None:
+def get_login_streak(username: str) -> dict:
+    """Return {current, longest, last_date}."""
+    key = username.strip().lower()
+    if not key:
+        return {"current": 0, "longest": 0, "last_date": None}
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT current, longest, last_date FROM streaks WHERE username=?", (key,)
+        ).fetchone()
+    if not row:
+        return {"current": 0, "longest": 0, "last_date": None}
+    return {"current": row["current"], "longest": row["longest"], "last_date": row["last_date"]}
+
+
+# ── Concept mastery (username-scoped) ───────────────────────────────────────
+
+def update_concept_mastery(username: str, concept: str, correct: bool) -> None:
     """Increment concept-level puzzle stats."""
+    key = username.strip().lower()
+    if not key:
+        return
     with _connect() as conn:
         conn.execute(
-            "INSERT INTO concept_mastery (concept, correct, attempted, last_at) "
-            "VALUES (?, ?, 1, datetime('now')) "
-            "ON CONFLICT(concept) DO UPDATE SET "
+            "INSERT INTO concept_mastery (username, concept, correct, attempted, last_at) "
+            "VALUES (?, ?, ?, 1, datetime('now')) "
+            "ON CONFLICT(username, concept) DO UPDATE SET "
             "correct = concept_mastery.correct + excluded.correct, "
             "attempted = concept_mastery.attempted + 1, "
             "last_at = excluded.last_at",
-            (concept, 1 if correct else 0),
+            (key, concept, 1 if correct else 0),
         )
 
 
-def get_all_concept_mastery() -> dict[str, dict]:
+def get_all_concept_mastery(username: str) -> dict[str, dict]:
     """Return {concept: {correct, attempted, pct}} for all tracked concepts."""
+    key = username.strip().lower()
+    if not key:
+        return {}
     with _connect() as conn:
         rows = conn.execute(
-            "SELECT concept, correct, attempted FROM concept_mastery"
+            "SELECT concept, correct, attempted FROM concept_mastery WHERE username=?",
+            (key,),
         ).fetchall()
     result = {}
     for r in rows:
@@ -806,12 +917,3 @@ def get_all_concept_mastery() -> dict[str, dict]:
             "pct": round(100 * r["correct"] / attempted) if attempted else 0,
         }
     return result
-
-
-def get_login_streak() -> dict:
-    """Return {current, longest, last_date}."""
-    with _connect() as conn:
-        row = conn.execute("SELECT current, longest, last_date FROM streaks WHERE id=1").fetchone()
-    if not row:
-        return {"current": 0, "longest": 0, "last_date": None}
-    return {"current": row["current"], "longest": row["longest"], "last_date": row["last_date"]}

@@ -1776,7 +1776,8 @@ def get_recommended_modules(
     # 4. Concept mastery from puzzle performance (low accuracy → boost priority)
     try:
         import db as _db
-        _cm = _db.get_all_concept_mastery()
+        _cm_user = profile_data.get("username", "") if profile_data else ""
+        _cm = _db.get_all_concept_mastery(_cm_user) if _cm_user else {}
         for c_name, c_data in _cm.items():
             if c_data["attempted"] >= 3 and c_data["pct"] < 60:
                 concept_scores[c_name] = concept_scores.get(c_name, 0) + 2
