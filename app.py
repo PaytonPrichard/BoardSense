@@ -8154,6 +8154,7 @@ def _render_onboarding_tour():
             if st.button("Next" if not is_last else "Get Started!", key="tour_next", type="primary", use_container_width=True):
                 if is_last:
                     st.session_state._onboarding_dismissed = True
+                    st.session_state["navigate_to_dashboard"] = True
                 else:
                     next_step = step + 1
                     st.session_state._onboarding_step = next_step
@@ -8477,9 +8478,6 @@ def render_dashboard_tab():
     _check_streak_achievements()
 
     if not profile:
-        # Onboarding tour for first-time users
-        _render_onboarding_tour()
-
         # No profile yet — guided onboarding
         st.markdown(
             '<div style="text-align:center;padding:28px 0 8px;">'
@@ -10376,6 +10374,10 @@ if _active_build_job:
         st.info("♔ ⚔ ♚  Claude is synthesizing your profile… almost done!")
     else:
         st.progress(_abj_pct, text=f"♔ ⚔ ♚  Analysing game {_abj_done}/{_abj_total}{_abj_eta_str}")
+
+# Onboarding tour — rendered above tabs so it persists across navigation
+if not st.session_state.get("profile_data"):
+    _render_onboarding_tour()
 
 tab_dashboard, tab_profile, tab_learn, tab_puzzles, tab_review = st.tabs(
     ["Dashboard", "Profile", "Learn", "Puzzles", "Game Review"]
