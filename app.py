@@ -435,20 +435,22 @@ st.markdown("""
         outline-offset: 2px !important;
     }
 
-    /* ── Skip-to-content link for keyboard users ─────────────────────── */
+    /* ── Skip-to-content link for keyboard/screen-reader users ──────── */
     .skip-link {
-        position: absolute;
-        top: -40px;
-        left: 0;
+        position: fixed;
+        top: -100%;
+        left: 50%;
+        transform: translateX(-50%);
         background: #5a7ac8;
         color: #fff;
-        padding: 8px 16px;
-        z-index: 1000000;
+        padding: 10px 24px;
+        z-index: 1000001;
         font-size: 0.85em;
         font-weight: 700;
         text-decoration: none;
-        border-radius: 0 0 8px 0;
-        transition: top 0.2s;
+        border-radius: 0 0 10px 10px;
+        transition: top 0.25s ease;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     }
     .skip-link:focus {
         top: 0;
@@ -456,10 +458,9 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ── Skip-to-content link (accessibility) ──────────────────────────────────
+# ── Skip-to-content link (accessibility — only visible on keyboard Tab) ────
 st.markdown(
-    '<a href="#main-content" class="skip-link">Skip to main content</a>'
-    '<div id="main-content"></div>',
+    '<a href="#main-content" class="skip-link">Skip to main content</a>',
     unsafe_allow_html=True,
 )
 
@@ -471,7 +472,8 @@ st.markdown(
     '&#9812;&ensp;BOARDSENSE</span>'
     '<span style="font-size:0.68em;font-weight:600;color:#4a6a80;letter-spacing:0.08em;'
     'position:relative;top:-1px;">CHESS COACHING</span>'
-    '</div>',
+    '</div>'
+    '<div id="main-content"></div>',
     unsafe_allow_html=True,
 )
 
@@ -8086,6 +8088,16 @@ def _render_onboarding_tour():
             "icon": "&#128100;",
         },
         {
+            "title": "No Online Account?",
+            "body": (
+                "No problem! You can still use BoardSense without a Chess.com or Lichess account. "
+                "Go to <strong>Game Review</strong> and upload any PGN file to get full Stockfish + AI analysis. "
+                "You can also chat with the AI coach in the <strong>Learn</strong> tab — "
+                "just ask any chess question."
+            ),
+            "icon": "&#9899;",
+        },
+        {
             "title": "Learn",
             "body": "My Path gives you a personalized learning sequence. Coaching has concept lessons, Training has structured courses, and Ask Coach lets you chat with an AI coach.",
             "icon": "&#128218;",
@@ -8107,7 +8119,6 @@ def _render_onboarding_tour():
 
     s = _TOUR_STEPS[step]
     is_last = step == len(_TOUR_STEPS) - 1
-    next_label = "Get Started!" if is_last else "Next &rarr;"
 
     st.markdown(
         f'<div style="background:linear-gradient(135deg,#0d1f30 0%,#152a40 100%);'
@@ -8128,18 +8139,20 @@ def _render_onboarding_tour():
         f'</div></div>',
         unsafe_allow_html=True,
     )
-    _tour_c1, _tour_c2 = st.columns([1, 1])
-    with _tour_c1:
-        if st.button("Skip Tour", key="tour_skip"):
-            st.session_state._onboarding_dismissed = True
-            st.rerun()
-    with _tour_c2:
-        if st.button("Next" if not is_last else "Get Started!", key="tour_next", type="primary"):
-            if is_last:
+    _, _tour_center, _ = st.columns([1, 2, 1])
+    with _tour_center:
+        _tc1, _tc2 = st.columns(2)
+        with _tc1:
+            if st.button("Skip Tour", key="tour_skip", use_container_width=True):
                 st.session_state._onboarding_dismissed = True
-            else:
-                st.session_state._onboarding_step = step + 1
-            st.rerun()
+                st.rerun()
+        with _tc2:
+            if st.button("Next" if not is_last else "Get Started!", key="tour_next", type="primary", use_container_width=True):
+                if is_last:
+                    st.session_state._onboarding_dismissed = True
+                else:
+                    st.session_state._onboarding_step = step + 1
+                st.rerun()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -8536,12 +8549,15 @@ def render_dashboard_tab():
                 desc="Curriculum adapted to your weaknesses",
             ), unsafe_allow_html=True)
 
-        # Game Review works without a profile
+        # Options for users without an account
         st.markdown(
             '<div style="text-align:center;margin-top:20px;">'
-            '<span style="font-size:0.82em;color:#7a9ab0;">Or '
-            '<strong style="color:#a0bccc;">review a single game</strong> '
-            'without a profile — upload any PGN in the Game Review tab.</span></div>',
+            '<span style="font-size:0.82em;color:#7a9ab0;">'
+            'Don\'t have an online chess account? You can still '
+            '<strong style="color:#a0bccc;">review any game</strong> '
+            'by uploading a PGN in the Game Review tab, or '
+            '<strong style="color:#a0bccc;">chat with the AI coach</strong> '
+            'in Learn &rarr; Ask Coach.</span></div>',
             unsafe_allow_html=True,
         )
         return
