@@ -22,13 +22,23 @@ def get_archives(username: str) -> list[str]:
     Each URL covers one calendar month of games.
     """
     url  = f"{BASE}/player/{username.lower()}/games/archives"
-    resp = requests.get(url, headers=_HEADERS, timeout=10)
+    try:
+        resp = requests.get(url, headers=_HEADERS, timeout=10)
+    except requests.RequestException as e:
+        raise RuntimeError(f"Could not reach Chess.com — check your connection and try again. ({e})") from e
     if resp.status_code == 403:
         raise RuntimeError(
             "Chess.com rate limit reached — please wait a few minutes and try again."
         )
+    if resp.status_code == 404:
+        raise RuntimeError(
+            f"Chess.com user '{username}' not found. Please check the spelling."
+        )
     resp.raise_for_status()
-    archives = resp.json().get("archives", [])
+    try:
+        archives = resp.json().get("archives", [])
+    except (ValueError, KeyError):
+        raise RuntimeError("Unexpected response from Chess.com — please try again.")
     return list(reversed(archives))
 
 
@@ -37,9 +47,14 @@ def fetch_month(archive_url: str) -> list[dict]:
     Fetch all games from one monthly archive URL.
     Returns a list of {pgn: str, headers: dict} dicts (skips games with no moves).
     """
-    resp = requests.get(archive_url, headers=_HEADERS, timeout=20)
-    resp.raise_for_status()
-    games_raw = resp.json().get("games", [])
+    try:
+        resp = requests.get(archive_url, headers=_HEADERS, timeout=20)
+        resp.raise_for_status()
+        games_raw = resp.json().get("games", [])
+    except requests.RequestException:
+        return []  # skip this month gracefully
+    except (ValueError, KeyError):
+        return []
 
     result = []
     for g in games_raw:

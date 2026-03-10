@@ -4,19 +4,45 @@ SQLite persistence layer for games, concepts, and lessons.
 """
 
 import sqlite3
+import time
 from pathlib import Path
 
 DB_PATH = Path(__file__).parent / "chesstutor.db"
 
+_MAX_RETRIES = 3
+_RETRY_DELAY = 0.5  # seconds
+
 
 def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    """Connect to SQLite with retry logic for locked/busy databases."""
+    for attempt in range(_MAX_RETRIES):
+        try:
+            conn = sqlite3.connect(DB_PATH, timeout=10)
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA journal_mode=WAL")  # better concurrent access
+            return conn
+        except sqlite3.OperationalError:
+            if attempt < _MAX_RETRIES - 1:
+                time.sleep(_RETRY_DELAY * (attempt + 1))
+            else:
+                raise
 
 
 def init_db():
-    """Create tables if they don't exist."""
+    """Create tables if they don't exist. Resilient to corruption — recreates DB if needed."""
+    try:
+        _init_db_inner()
+    except sqlite3.DatabaseError:
+        # DB file is corrupted — rename it and start fresh
+        backup = DB_PATH.with_suffix(".db.bak")
+        try:
+            DB_PATH.rename(backup)
+        except OSError:
+            DB_PATH.unlink(missing_ok=True)
+        _init_db_inner()
+
+
+def _init_db_inner():
     with _connect() as conn:
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS games (
@@ -137,6 +163,31 @@ def init_db():
                 date          TEXT PRIMARY KEY,
                 targets_json  TEXT,
                 progress_json TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS session_stats (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_date  TEXT,
+                duration_secs INTEGER DEFAULT 0,
+                puzzles       INTEGER DEFAULT 0,
+                lessons       INTEGER DEFAULT 0,
+                reviews       INTEGER DEFAULT 0,
+                started_at    TEXT DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS streaks (
+                id            INTEGER PRIMARY KEY CHECK (id = 1),
+                current       INTEGER DEFAULT 0,
+                longest       INTEGER DEFAULT 0,
+                last_date     TEXT
+            );
+            INSERT OR IGNORE INTO streaks (id) VALUES (1);
+
+            CREATE TABLE IF NOT EXISTS concept_mastery (
+                concept    TEXT PRIMARY KEY,
+                correct    INTEGER DEFAULT 0,
+                attempted  INTEGER DEFAULT 0,
+                last_at    TEXT
             );
         """)
         # Migration: add recent_json column to existing DBs (safe no-op if already present)
@@ -356,16 +407,24 @@ def get_profile_history(username: str) -> list[dict]:
             "FROM profile_history WHERE username=? COLLATE NOCASE ORDER BY built_at",
             (username,),
         ).fetchall()
-    return [
-        {
+    results = []
+    for r in rows:
+        try:
+            skills = json.loads(r["skill_json"])
+        except (json.JSONDecodeError, TypeError):
+            skills = {}
+        try:
+            record = json.loads(r["record_json"] or "{}")
+        except (json.JSONDecodeError, TypeError):
+            record = {}
+        results.append({
             "overall_acc":   r["overall_acc"],
-            "skill_ratings": json.loads(r["skill_json"]),
+            "skill_ratings": skills,
             "n_games":       r["n_games"],
-            "record":        json.loads(r["record_json"] or "{}"),
+            "record":        record,
             "built_at":      r["built_at"],
-        }
-        for r in rows
-    ]
+        })
+    return results
 
 
 def load_profile(username: str) -> tuple | None:
@@ -382,7 +441,12 @@ def load_profile(username: str) -> tuple | None:
         ).fetchone()
     if not row:
         return None
-    return json.loads(row["profile_json"]), json.loads(row["summaries_json"]), row["built_at"]
+    try:
+        profile = json.loads(row["profile_json"])
+        summaries = json.loads(row["summaries_json"])
+    except (json.JSONDecodeError, TypeError):
+        return None
+    return profile, summaries, row["built_at"]
 
 
 def get_puzzle_stats() -> dict:
@@ -657,3 +721,97 @@ def save_daily_goals(date: str, targets: dict, progress: dict):
             "targets_json=excluded.targets_json, progress_json=excluded.progress_json",
             (date, json.dumps(targets), json.dumps(progress)),
         )
+
+
+# ── Session Stats ────────────────────────────────────────────────────────────
+
+def save_session_stats(duration_secs: int, puzzles: int, lessons: int, reviews: int):
+    """Record a session's activity stats."""
+    from datetime import date
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO session_stats (session_date, duration_secs, puzzles, lessons, reviews) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (date.today().isoformat(), duration_secs, puzzles, lessons, reviews),
+        )
+
+
+def get_session_stats(days: int = 30) -> list[dict]:
+    """Return session stats for the last N days, newest first."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT session_date, SUM(duration_secs) as total_secs, "
+            "SUM(puzzles) as puzzles, SUM(lessons) as lessons, SUM(reviews) as reviews "
+            "FROM session_stats "
+            "WHERE session_date >= date('now', ? || ' days') "
+            "GROUP BY session_date ORDER BY session_date DESC",
+            (f"-{days}",),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ── Login Streaks ────────────────────────────────────────────────────────────
+
+def update_login_streak() -> dict:
+    """Update the daily login streak. Returns {current, longest, is_new_day}."""
+    from datetime import date, timedelta
+    today = date.today().isoformat()
+    with _connect() as conn:
+        row = conn.execute("SELECT current, longest, last_date FROM streaks WHERE id=1").fetchone()
+        current = row["current"] if row else 0
+        longest = row["longest"] if row else 0
+        last_date = row["last_date"] if row else None
+
+        is_new_day = last_date != today
+        if is_new_day:
+            yesterday = (date.today() - timedelta(days=1)).isoformat()
+            if last_date == yesterday:
+                current += 1
+            elif last_date != today:
+                current = 1
+            longest = max(longest, current)
+            conn.execute(
+                "UPDATE streaks SET current=?, longest=?, last_date=? WHERE id=1",
+                (current, longest, today),
+            )
+    return {"current": current, "longest": longest, "is_new_day": is_new_day}
+
+
+def update_concept_mastery(concept: str, correct: bool) -> None:
+    """Increment concept-level puzzle stats."""
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO concept_mastery (concept, correct, attempted, last_at) "
+            "VALUES (?, ?, 1, datetime('now')) "
+            "ON CONFLICT(concept) DO UPDATE SET "
+            "correct = concept_mastery.correct + excluded.correct, "
+            "attempted = concept_mastery.attempted + 1, "
+            "last_at = excluded.last_at",
+            (concept, 1 if correct else 0),
+        )
+
+
+def get_all_concept_mastery() -> dict[str, dict]:
+    """Return {concept: {correct, attempted, pct}} for all tracked concepts."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT concept, correct, attempted FROM concept_mastery"
+        ).fetchall()
+    result = {}
+    for r in rows:
+        attempted = r["attempted"]
+        result[r["concept"]] = {
+            "correct": r["correct"],
+            "attempted": attempted,
+            "pct": round(100 * r["correct"] / attempted) if attempted else 0,
+        }
+    return result
+
+
+def get_login_streak() -> dict:
+    """Return {current, longest, last_date}."""
+    with _connect() as conn:
+        row = conn.execute("SELECT current, longest, last_date FROM streaks WHERE id=1").fetchone()
+    if not row:
+        return {"current": 0, "longest": 0, "last_date": None}
+    return {"current": row["current"], "longest": row["longest"], "last_date": row["last_date"]}

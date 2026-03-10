@@ -1773,6 +1773,18 @@ def get_recommended_modules(
         for concept in _PHASE_CONCEPTS.get(weakest, set()):
             concept_scores[concept] = concept_scores.get(concept, 0) + 1
 
+    # 4. Concept mastery from puzzle performance (low accuracy → boost priority)
+    try:
+        import db as _db
+        _cm = _db.get_all_concept_mastery()
+        for c_name, c_data in _cm.items():
+            if c_data["attempted"] >= 3 and c_data["pct"] < 60:
+                concept_scores[c_name] = concept_scores.get(c_name, 0) + 2
+            elif c_data["attempted"] >= 3 and c_data["pct"] < 80:
+                concept_scores[c_name] = concept_scores.get(c_name, 0) + 1
+    except Exception:
+        pass
+
     if not concept_scores:
         return []
 
@@ -1814,6 +1826,94 @@ def get_recommended_modules(
     # Sort by score desc, then stage proximity to target
     scored.sort(key=lambda x: (-x[0], abs((x[1]["stage"] - target_stage) if target_stage else 0)))
     return [item for _, item in scored[:max_results]]
+
+
+def build_guided_path(
+    profile_data: dict | None,
+    profile_summaries: list[dict] | None,
+    completed: dict[str, dict] | None = None,
+    rating: int | None = None,
+) -> list[dict]:
+    """
+    Build a full ordered learning path based on the player's weaknesses.
+
+    Returns ALL curriculum modules in recommended order.  Each dict:
+        {module_id, stage, title, concept, reason, score, completed}
+
+    Order:
+      1. Priority focus + weak skill modules (highest relevance score)
+      2. Modules at or near the player's current stage
+      3. Remaining modules in stage order
+
+    Already-completed modules are pushed to the end.
+    """
+    completed = completed or {}
+    target_stage = get_stage_for_rating(rating) if rating else 1
+
+    # ── Score every module using the same logic as get_recommended_modules ──
+    concept_scores: dict[str, float] = {}
+    if profile_data:
+        for concept in profile_data.get("priority_focus", []):
+            concept_scores[concept] = concept_scores.get(concept, 0) + 3
+        for cat, info in profile_data.get("skill_ratings", {}).items():
+            r = info.get("rating", 3) if isinstance(info, dict) else 3
+            if r <= 2 and cat in _SKILL_CONCEPTS:
+                for concept in _SKILL_CONCEPTS[cat]:
+                    concept_scores[concept] = concept_scores.get(concept, 0) + 2
+
+    if profile_summaries:
+        def _avg(vals):
+            clean = [v for v in vals if v is not None]
+            return sum(clean) / len(clean) if clean else 50.0
+        phase_accs = {
+            "opening": _avg([s.get("opening_accuracy") for s in profile_summaries]),
+            "middlegame": _avg([s.get("middlegame_accuracy") for s in profile_summaries]),
+            "endgame": _avg([s.get("endgame_accuracy") for s in profile_summaries]),
+        }
+        weakest = min(phase_accs, key=phase_accs.get)
+        for concept in _PHASE_CONCEPTS.get(weakest, set()):
+            concept_scores[concept] = concept_scores.get(concept, 0) + 1
+
+    all_modules: list[dict] = []
+    for stage_num, stage in CURRICULUM.items():
+        for mod in stage["modules"]:
+            concept = mod.get("concept", "")
+            score = concept_scores.get(concept, 0)
+
+            # Prefer modules near the player's level
+            stage_dist = abs(stage_num - target_stage) if target_stage else 0
+            if stage_dist <= 1:
+                score += 1
+
+            reason = "curriculum"
+            if concept in (profile_data or {}).get("priority_focus", []):
+                reason = "priority focus area"
+            elif score >= 2:
+                reason = "targets your weaknesses"
+            elif stage_dist <= 1:
+                reason = "at your level"
+
+            is_done = mod["id"] in completed and completed[mod["id"]].get("completed")
+
+            all_modules.append({
+                "module_id": mod["id"],
+                "stage": stage_num,
+                "title": mod["title"],
+                "concept": concept,
+                "reason": reason,
+                "score": score,
+                "completed": bool(is_done),
+            })
+
+    # Sort: incomplete first, then by score desc, then by stage proximity
+    all_modules.sort(key=lambda m: (
+        m["completed"],           # False (0) before True (1)
+        -m["score"],              # higher score first
+        abs(m["stage"] - target_stage) if target_stage else 0,
+        m["stage"],               # within same distance, lower stage first
+    ))
+
+    return all_modules
 
 
 def get_module(module_id: str) -> dict | None:

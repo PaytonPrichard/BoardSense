@@ -204,17 +204,26 @@ def _eval_for_mover(t: dict) -> float:
 # ── Public engine helpers ────────────────────────────────────────────────────
 
 def get_engine(depth: int = STOCKFISH_DEPTH) -> Stockfish:
-    """Start Stockfish and return the engine object."""
+    """Start Stockfish and return the engine object. Retries once on failure."""
     if not os.path.exists(STOCKFISH_PATH):
         raise FileNotFoundError(f"Stockfish not found at: {STOCKFISH_PATH}")
-    return Stockfish(
-        path=STOCKFISH_PATH,
-        depth=depth,
-        parameters={
-            "Hash":    STOCKFISH_HASH,
-            "Threads": STOCKFISH_THREADS,
-        },
-    )
+    for attempt in range(2):
+        try:
+            engine = Stockfish(
+                path=STOCKFISH_PATH,
+                depth=depth,
+                parameters={
+                    "Hash":    STOCKFISH_HASH,
+                    "Threads": STOCKFISH_THREADS,
+                },
+            )
+            return engine
+        except Exception:
+            if attempt == 0:
+                import time
+                time.sleep(0.5)
+            else:
+                raise
 
 
 def format_evaluation(evaluation: dict) -> str:

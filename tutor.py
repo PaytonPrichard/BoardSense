@@ -4,10 +4,13 @@ All Claude AI logic: move explanation and full game review.
 """
 
 import json
+import logging
 import re
 import chess
-from anthropic import Anthropic
+from anthropic import Anthropic, APIError, APIConnectionError, APITimeoutError
 from dotenv import load_dotenv
+
+_log = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -218,11 +221,16 @@ Instructions per insight (30–50 words each, use move names throughout):
             " Do not include move notation."
         )
 
-    message = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=900,
-        messages=[{"role": "user", "content": prompt}]
-    )
+    try:
+        message = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=900,
+            timeout=45.0,
+            messages=[{"role": "user", "content": prompt}]
+        )
+    except (APIError, APIConnectionError, APITimeoutError) as e:
+        _log.warning("explain_move API error: %s", e)
+        return {"insights": [{"label": "Analysis", "text": "Analysis temporarily unavailable. Please try again."}], "concepts": []}
 
     result = _parse_explain_response(message.content[0].text)
     for ins in result.get("insights", []):
@@ -231,19 +239,55 @@ Instructions per insight (30–50 words each, use move names throughout):
     return result
 
 
-def generate_concept_lesson(concept: str, game_examples: list[dict] | None = None) -> str:
+def generate_concept_lesson(
+    concept: str,
+    game_examples: list[dict] | None = None,
+    enriched_examples: list[dict] | None = None,
+) -> str:
     """
     Generate a focused educational lesson on a chess concept.
 
     game_examples: list of {move_number, color, move_san, classification} dicts
                    sourced from the player's own game analysis.
+    enriched_examples: list of {fen, move_san, best_move_san, eval_before, eval_after,
+                       classification, phase, move_number, color} dicts with full
+                       engine data — used to ground the lesson in real positions.
 
     Returns markdown-formatted lesson text (ready for st.markdown).
     """
     client = Anthropic()
 
     ex_text = ""
-    if game_examples:
+    if enriched_examples:
+        # Use enriched data with FENs and evals for grounded teaching
+        lines = []
+        for e in enriched_examples[:3]:
+            dot = "." if e.get("color") == "white" else "..."
+            ev_b = e.get("eval_before", 0)
+            ev_a = e.get("eval_after", 0)
+            best = e.get("best_move_san", "")
+            fen = e.get("fen", "")
+            phase = e.get("phase", "")
+            line = (
+                f"  - Move {e.get('move_number', '?')}{dot}{e.get('move_san', '?')} "
+                f"({e.get('classification', '?')}, {phase})\n"
+                f"    FEN: {fen}\n"
+                f"    Eval: {ev_b:+.2f} → {ev_a:+.2f}"
+            )
+            if best and best != e.get("move_san"):
+                line += f" | Best was: {best}"
+            lines.append(line)
+        ex_text = (
+            "\n\nThis concept appeared in the student's recent games. "
+            "Use these EXACT positions to illustrate the concept — reference the FEN, "
+            "the move played, why the engine's recommendation was better, and what the "
+            "eval shift reveals:\n"
+            + "\n".join(lines)
+            + "\n\nIMPORTANT: In 'How to spot it', reference signals visible in these "
+            "actual positions (piece placement, pawn structure, king safety, etc.). "
+            "In 'How to use it', walk through one of the above positions step by step."
+        )
+    elif game_examples:
         lines = []
         for e in game_examples[:3]:
             dot = "." if e["color"] == "white" else "..."
@@ -256,25 +300,34 @@ def generate_concept_lesson(concept: str, game_examples: list[dict] | None = Non
             + "\nReference these specific positions where it adds clarity."
         )
 
-    prompt = f"""You are a chess coach writing a focused lesson for a club-level player (rated 1200–1600).
-
-Write a practical, actionable lesson on: **{concept}**{ex_text}
-
-Use exactly these section headers (markdown ## level, no deviations):
-
-## What is it?
-## Why it matters
-## How to spot it
-## How to use it
-## Key rule of thumb
-
-Guidelines:
-- Total length: 260–330 words
-- Write directly to the student ("you", "your")
-- Use move notation where it adds precision (e.g. Rxf7!, Nd5+)
-- Every sentence must be actionable — no vague generalities
-- "How to spot it": give 3–4 concrete signals to look for in any position
-- "Key rule of thumb": one memorable, punchy sentence they can recall mid-game at the board
+    # If we have enriched examples, use their FENs as example positions
+    # instead of asking Claude to invent positions from memory
+    example_instruction = ""
+    if enriched_examples:
+        fen_examples = []
+        for e in enriched_examples[:2]:
+            fen = e.get("fen", "")
+            best = e.get("best_move_san", e.get("move_san", ""))
+            if fen and best:
+                fen_examples.append(
+                    f"FEN: {fen}\n"
+                    f"MOVE: {best}\n"
+                    f"CAPTION: From the student's game — {e.get('classification', 'notable')} "
+                    f"at move {e.get('move_number', '?')} (eval {e.get('eval_before', 0):+.1f} → "
+                    f"{e.get('eval_after', 0):+.1f})"
+                )
+        if fen_examples:
+            example_instruction = (
+                "\n\n## Example Positions\n\n"
+                "Use these REAL positions from the student's games as examples. "
+                "You may add 1 additional classic textbook position if needed.\n\n"
+                "---EXAMPLES---\n"
+                + "\n\n".join(fen_examples)
+                + "\n\nYou may add ONE more example using a well-known position, format:\n"
+                "FEN: <valid FEN>\nMOVE: <legal SAN>\nCAPTION: <1-sentence>"
+            )
+    if not example_instruction:
+        example_instruction = """
 
 ## Example Positions
 
@@ -296,11 +349,39 @@ FEN: <valid FEN string>
 MOVE: <legal SAN move in this position>
 CAPTION: <1-sentence explanation>"""
 
-    message = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1200,
-        messages=[{"role": "user", "content": prompt}]
-    )
+    prompt = f"""You are a chess coach writing a focused lesson for a club-level player (rated 1200–1600).
+
+Write a practical, actionable lesson on: **{concept}**{ex_text}
+
+Use exactly these section headers (markdown ## level, no deviations):
+
+## What is it?
+## Why it matters
+## How to spot it
+## How to use it
+## Key rule of thumb
+
+Guidelines:
+- Total length: 260–330 words
+- Write directly to the student ("you", "your")
+- Use move notation where it adds precision (e.g. Rxf7!, Nd5+)
+- Every sentence must be actionable — no vague generalities
+- "How to spot it": give 3–4 concrete signals to look for in any position
+- "Key rule of thumb": one memorable, punchy sentence they can recall mid-game at the board
+- When referencing the student's games, cite the eval shift to show WHY the move was wrong
+  (e.g. "Your 14.Bxf7 dropped the eval from +0.5 to -2.1 because...")
+- Name specific squares, pieces, and lines — never say "a piece" when you mean "the knight on d5"{example_instruction}"""
+
+    try:
+        message = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1200,
+            timeout=60.0,
+            messages=[{"role": "user", "content": prompt}]
+        )
+    except (APIError, APIConnectionError, APITimeoutError) as e:
+        _log.warning("generate_concept_lesson API error: %s", e)
+        raise RuntimeError(f"Lesson generation temporarily unavailable: {e}") from e
     return message.content[0].text.strip()
 
 
@@ -410,11 +491,16 @@ Guidelines:
 - "How to spot it": give 3–4 concrete signals to look for in any position
 - "Key rule of thumb": one memorable sentence they can recall at the board"""
 
-    message = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=700,
-        messages=[{"role": "user", "content": prompt}]
-    )
+    try:
+        message = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=700,
+            timeout=45.0,
+            messages=[{"role": "user", "content": prompt}]
+        )
+    except (APIError, APIConnectionError, APITimeoutError) as e:
+        _log.warning("generate_ranked_lesson API error: %s", e)
+        raise RuntimeError(f"Lesson generation temporarily unavailable: {e}") from e
     return message.content[0].text.strip()
 
 
@@ -461,6 +547,8 @@ def generate_puzzle_hint(
     best_move_san: str,
     player_color: str,
     classification: str,
+    eval_before: float | None = None,
+    eval_after: float | None = None,
 ) -> str:
     """
     Generate a short coaching hint for a puzzle position without revealing the move.
@@ -469,25 +557,40 @@ def generate_puzzle_hint(
     """
     client = Anthropic()
 
+    eval_context = ""
+    if eval_before is not None and eval_after is not None:
+        swing = abs(eval_after - eval_before)
+        eval_context = (
+            f"\nEval context: position was {eval_before:+.2f} before, the played move "
+            f"changed it to {eval_after:+.2f} (swing of {swing:.1f} pawns). "
+            f"Use this to gauge the severity — guide urgency accordingly."
+        )
+
     prompt = f"""You are a chess coach giving a hint to a student working on a puzzle.
 
 Position (FEN): {fen}
 Player: {player_color.capitalize()}
 Classification: {classification} (there is a significantly better move available)
-Best move: {best_move_san} — DO NOT mention this move, its starting square, or its destination square.
+Best move: {best_move_san} — DO NOT mention this move, its starting square, or its destination square.{eval_context}
 
 Write exactly 1-2 sentences that guide the student toward finding the best move WITHOUT revealing it.
 Focus on the tactical or strategic idea: name the pattern (pin, fork, discovered attack, back rank, overloaded piece, etc.) and point toward the weakness or resource to exploit.
-Be specific to this position — no generic advice.
+Reference specific pieces and squares visible in the FEN — no generic advice.
 
 Reply with ONLY the hint text. No quotes, no labels, no markdown."""
 
-    message = client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=120,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    hint = message.content[0].text.strip()
+    try:
+        message = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=120,
+            timeout=30.0,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        hint = message.content[0].text.strip()
+    except (APIError, APIConnectionError, APITimeoutError) as e:
+        _log.warning("generate_puzzle_hint API error: %s", e)
+        import random
+        return random.choice(_GENERIC_HINTS)
     if _check_hint_leaks(hint, best_move_san, fen):
         import random
         hint = random.choice(_GENERIC_HINTS)
@@ -500,6 +603,9 @@ def generate_puzzle_explanation(
     player_color: str,
     classification: str,
     was_correct: bool,
+    eval_before: float | None = None,
+    eval_after: float | None = None,
+    played_move_san: str | None = None,
 ) -> str:
     """
     Generate a short explanation of why the best move works in a puzzle position.
@@ -514,23 +620,43 @@ def generate_puzzle_explanation(
         else "The student did NOT find the correct move. Explain the pattern they should recognize next time."
     )
 
+    eval_context = ""
+    if eval_before is not None and eval_after is not None:
+        eval_context = (
+            f"\nEval shift: {eval_before:+.2f} → {eval_after:+.2f} "
+            f"(the played move cost {abs(eval_after - eval_before):.1f} pawns). "
+            f"Reference this eval swing to show WHY the best move matters."
+        )
+
+    played_context = ""
+    if played_move_san and played_move_san != best_move_san and not was_correct:
+        played_context = (
+            f"\nThe student played: {played_move_san}. Briefly explain what's wrong "
+            f"with this move compared to {best_move_san}."
+        )
+
     prompt = f"""You are a chess coach explaining a puzzle solution.
 
 Position (FEN): {fen}
 Best move: {best_move_san}
 Player: {player_color.capitalize()}
 Classification: {classification}
-{outcome}
+{outcome}{eval_context}{played_context}
 
-In 2-3 sentences, explain WHY {best_move_san} is the best move. Name the tactic or strategy (pin, fork, discovered attack, etc.) and reference specific squares. Be concrete and educational.
+In 2-3 sentences, explain WHY {best_move_san} is the best move. Name the tactic or strategy (pin, fork, discovered attack, etc.) and reference specific squares and pieces from the FEN. Be concrete and educational.
 
 Reply with ONLY the explanation text. No quotes, no labels, no markdown."""
 
-    message = client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=180,
-        messages=[{"role": "user", "content": prompt}],
-    )
+    try:
+        message = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=180,
+            timeout=30.0,
+            messages=[{"role": "user", "content": prompt}],
+        )
+    except (APIError, APIConnectionError, APITimeoutError) as e:
+        _log.warning("generate_puzzle_explanation API error: %s", e)
+        return f"The best move was {best_move_san}. Explanation temporarily unavailable."
     return _validate_move_refs(message.content[0].text.strip(), fen)
 
 
@@ -584,12 +710,15 @@ def full_game_review(game_moves: list[dict], pgn_headers: dict) -> dict:
         best = m.get("best_move_san", "")
         ev_before = m["eval_before"]
         ev_after = m["eval_after"]
+        fen_before = m.get("fen_before", "")
         entry = (
             f"Move {mn} ({'White' if col == 'white' else 'Black'}): "
             f"{san} was a {cls} (eval changed {ev_before:+.1f} → {ev_after:+.1f})"
         )
         if best and best != san:
             entry += f". Better was {best}."
+        if fen_before:
+            entry += f"\n  FEN before: {fen_before}"
         critical_summary.append(entry)
 
     full_move_list = " ".join(move_lines)
@@ -601,6 +730,22 @@ def full_game_review(game_moves: list[dict], pgn_headers: dict) -> dict:
     white_mistakes = sum(1 for m in game_moves if m["color"] == "white" and m["classification"] == "mistake")
     black_mistakes = sum(1 for m in game_moves if m["color"] == "black" and m["classification"] == "mistake")
 
+    # WP loss by phase
+    _phase_wpl: dict[str, dict[str, float]] = {}
+    for m in game_moves:
+        _mn = m["move_number"]
+        _ph = "opening" if _mn <= 12 else "endgame" if _mn >= 36 else "middlegame"
+        _col = m["color"]
+        _phase_wpl.setdefault((_ph, _col), 0.0)
+        _phase_wpl[(_ph, _col)] += m.get("wp_loss", 0)
+    _wp_lines = []
+    for _ph in ["opening", "middlegame", "endgame"]:
+        _w = _phase_wpl.get((_ph, "white"), 0)
+        _b = _phase_wpl.get((_ph, "black"), 0)
+        if _w > 0 or _b > 0:
+            _wp_lines.append(f"  {_ph.capitalize()}: White lost {_w:.1f}%, Black lost {_b:.1f}%")
+    _wp_phase_text = "\n".join(_wp_lines) if _wp_lines else "  (not available)"
+
     prompt = f"""You are a chess coach reviewing a completed game. Provide a structured analysis.
 
 Game details:
@@ -611,6 +756,8 @@ Game details:
 - Opening: {opening}
 - White blunders/mistakes: {white_blunders}/{white_mistakes}
 - Black blunders/mistakes: {black_blunders}/{black_mistakes}
+- Win probability cost by phase:
+{_wp_phase_text}
 
 Critical moments:
 {critical_text}
@@ -627,13 +774,25 @@ Respond ONLY with valid JSON (no markdown, no code fences) in this exact format:
   "tips_to_learn": ["Actionable tip 1", "Actionable tip 2", "Actionable tip 3"]
 }}
 
-Keep each list to 3-5 items. Be specific and educational."""
+Keep each list to 3-5 items. Be specific and educational.
+When FENs are provided for critical moments, reference the actual piece placement — name specific squares, pieces, and threats visible in the position. Never say "a piece" when you can say "the knight on d5"."""
 
-    message = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1200,
-        messages=[{"role": "user", "content": prompt}]
-    )
+    try:
+        message = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1200,
+            timeout=60.0,
+            messages=[{"role": "user", "content": prompt}]
+        )
+    except (APIError, APIConnectionError, APITimeoutError) as e:
+        _log.warning("full_game_review API error: %s", e)
+        return {
+            "summary": "Game review temporarily unavailable. Please try again.",
+            "key_moments": [],
+            "missed_tactics": [],
+            "positional_themes": [],
+            "tips_to_learn": [],
+        }
 
     raw = message.content[0].text.strip()
 
@@ -683,10 +842,14 @@ def coach_chat_stream(messages: list[dict], profile_context: str = ""):
             + profile_context
         )
 
-    with client.messages.stream(
-        model="claude-sonnet-4-6",
-        max_tokens=800,
-        system=system,
-        messages=messages,
-    ) as stream:
-        yield from stream.text_stream
+    try:
+        with client.messages.stream(
+            model="claude-sonnet-4-6",
+            max_tokens=800,
+            system=system,
+            messages=messages,
+        ) as stream:
+            yield from stream.text_stream
+    except (APIError, APIConnectionError, APITimeoutError) as e:
+        _log.warning("coach_chat_stream API error: %s", e)
+        yield "I'm temporarily unable to respond. Please try again in a moment."

@@ -61,14 +61,24 @@ def fetch_recent_games(
         "tags": "true",
     }
 
-    resp = requests.get(url, headers=_HEADERS, params=params, timeout=30)
+    try:
+        resp = requests.get(url, headers=_HEADERS, params=params, timeout=30)
+    except requests.RequestException as e:
+        raise RuntimeError(f"Could not reach Lichess — check your connection and try again. ({e})") from e
     if resp.status_code == 429:
         raise RuntimeError(
             "Lichess rate limit reached — please wait a few minutes and try again."
         )
+    if resp.status_code == 404:
+        raise RuntimeError(
+            f"Lichess user '{username}' not found. Please check the spelling."
+        )
     resp.raise_for_status()
 
-    games = _parse_pgn_stream(resp.text)
+    try:
+        games = _parse_pgn_stream(resp.text)
+    except Exception:
+        raise RuntimeError("Failed to parse games from Lichess. Please try again.")
     games.reverse()  # newest first
     _cache[key] = (now, games)
     return games

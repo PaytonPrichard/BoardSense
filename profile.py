@@ -11,13 +11,16 @@ Key differences from single-game analysis (engine.py):
 
 import io
 import json
+import logging
 import math
 import statistics
 
-from anthropic import Anthropic
+from anthropic import Anthropic, APIError, APIConnectionError, APITimeoutError
 import chess
 import chess.pgn
 from stockfish import Stockfish
+
+_log = logging.getLogger(__name__)
 
 from engine import STOCKFISH_PATH, STOCKFISH_HASH, _wp_loss, _accuracy_from_loss
 
@@ -399,7 +402,16 @@ def bulk_analyze_games(
     summaries = []
 
     for i, game_data in enumerate(games):
-        summary = _analyze_single_game(game_data["pgn"], engine, username)
+        try:
+            summary = _analyze_single_game(game_data["pgn"], engine, username)
+        except Exception as e:
+            _log.warning("Skipping game %d/%d due to engine error: %s", i + 1, len(games), e)
+            # Try to restart engine for next game
+            try:
+                engine = _get_bulk_engine(depth)
+            except Exception:
+                pass
+            summary = None
         if summary:
             summaries.append(summary)
         yield ("progress", i + 1, len(games), summary)
@@ -450,6 +462,12 @@ def build_player_profile(summaries: list[dict], username: str) -> dict:
     )
     draws = n - wins - losses
 
+    # Time trouble analysis
+    _total_time_trouble = sum(s.get("time_trouble_moves", 0) for s in summaries)
+    _has_clock_games = sum(1 for s in summaries if s.get("has_clock"))
+    _avg_move_times = [s["avg_move_time"] for s in summaries if s.get("avg_move_time") is not None]
+    _overall_avg_move_time = round(sum(_avg_move_times) / len(_avg_move_times), 1) if _avg_move_times else None
+
     half            = max(1, n // 2)
     first_half_acc  = _avg([s["player_accuracy"] for s in summaries[:half]])
     second_half_acc = _avg([s["player_accuracy"] for s in summaries[half:]])
@@ -467,6 +485,79 @@ def build_player_profile(summaries: list[dict], username: str) -> dict:
     dates      = sorted(s["date"] for s in summaries if s.get("date") and "?" not in s["date"])
     date_range = f"{dates[0][:7]} – {dates[-1][:7]}" if len(dates) >= 2 else (dates[0][:7] if dates else "")
 
+    # Collect worst critical moves across all games for concrete grounding
+    all_critical: list[dict] = []
+    for s in summaries:
+        for cm in s.get("critical_moves", []):
+            if cm.get("fen_before") and cm.get("classification") in ("blunder", "mistake"):
+                all_critical.append(cm)
+    # Sort by eval swing magnitude (worst first)
+    all_critical.sort(
+        key=lambda c: abs(c.get("eval_before", 0) - c.get("eval_after", 0)),
+        reverse=True,
+    )
+    critical_text = ""
+    if all_critical:
+        lines_c = []
+        for cm in all_critical[:5]:
+            mv = cm.get("move_number", "?")
+            col = cm.get("color", "?")
+            played = cm.get("move_san", "?")
+            best = cm.get("best_move_san", "")
+            ev_b = cm.get("eval_before", 0)
+            ev_a = cm.get("eval_after", 0)
+            phase = cm.get("phase", "?")
+            fen = cm.get("fen_before", "")
+            entry = (
+                f"  - Move {mv} ({col}, {phase}): played {played}, "
+                f"eval {ev_b:+.2f} → {ev_a:+.2f} ({cm.get('classification', '?')})"
+            )
+            if best and best != played:
+                entry += f", best was {best}"
+            if fen:
+                entry += f"\n    FEN: {fen}"
+            lines_c.append(entry)
+        critical_text = (
+            "\n\nTOP 5 WORST MOVES (reference these to justify your ratings):\n"
+            + "\n".join(lines_c)
+        )
+
+    # Group critical moves by tactical/structural pattern
+    _pattern_text = ""
+    try:
+        from chess_utils import position_has_concept
+        _PATTERN_CONCEPTS = [
+            "Fork", "Pin", "Back Rank Weakness", "Trapped Piece",
+            "Isolated Pawn", "Passed Pawn", "Rook On Open File", "Bad Bishop",
+        ]
+        _pattern_counts: dict[str, dict] = {}
+        for cm in all_critical:
+            _fen = cm.get("fen_before", "")
+            _best = cm.get("best_move_san", "")
+            _color = cm.get("color", "white")
+            if not _fen or not _best:
+                continue
+            for _pc in _PATTERN_CONCEPTS:
+                try:
+                    if position_has_concept(_fen, _pc, _best, _color):
+                        if _pc not in _pattern_counts:
+                            _pattern_counts[_pc] = {"count": 0, "phases": {}}
+                        _pattern_counts[_pc]["count"] += 1
+                        _ph = cm.get("phase", "?")
+                        _pattern_counts[_pc]["phases"][_ph] = _pattern_counts[_pc]["phases"].get(_ph, 0) + 1
+                except Exception:
+                    pass
+        _patterns = [(name, data) for name, data in _pattern_counts.items() if data["count"] >= 2]
+        _patterns.sort(key=lambda x: x[1]["count"], reverse=True)
+        if _patterns:
+            _pl = ["RECURRING PATTERNS (use these to inform priority_focus):"]
+            for _pn, _pd in _patterns[:4]:
+                _top_phase = max(_pd["phases"], key=_pd["phases"].get)
+                _pl.append(f"  - {_pn}: {_pd['count']}x, mostly in {_top_phase}")
+            _pattern_text = "\n".join(_pl) + "\n\n"
+    except Exception:
+        pass
+
     prompt = f"""You are a chess coach reviewing {n} recent games for player "{username}".
 
 AGGREGATE STATS ({date_range}):
@@ -481,8 +572,10 @@ AGGREGATE STATS ({date_range}):
 - Trend: {trend}
 - Weakest phase: {worst_phase} | Strongest phase: {best_phase}
 - Record: {wins}W {losses}L {draws}D from {n} games
+- Time trouble moves (across all games): {_total_time_trouble}{f" (from {_has_clock_games} games with clock data)" if _has_clock_games else ""}
+{f"- Average move time: {_overall_avg_move_time}s" if _overall_avg_move_time else ""}{critical_text}
 
-Rate the player on exactly these 6 categories using integers 1–5:
+{_pattern_text}Rate the player on exactly these 6 categories using integers 1–5:
   1 = Pawn (Beginner) | 2 = Knight (Developing) | 3 = Bishop (Intermediate)
   4 = Rook (Advanced) | 5 = Queen (Expert)
 
@@ -506,11 +599,16 @@ Respond ONLY with valid JSON (no markdown, no code fences):
 }}"""
 
     client  = Anthropic()
-    message = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=900,
-        messages=[{"role": "user", "content": prompt}],
-    )
+    try:
+        message = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=900,
+            timeout=60.0,
+            messages=[{"role": "user", "content": prompt}],
+        )
+    except (APIError, APIConnectionError, APITimeoutError) as e:
+        _log.warning("build_player_profile API error: %s", e)
+        raise RuntimeError(f"Profile synthesis temporarily unavailable: {e}") from e
 
     raw = message.content[0].text.strip()
     if raw.startswith("```"):

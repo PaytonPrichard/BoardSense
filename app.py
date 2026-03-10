@@ -32,7 +32,7 @@ if not os.environ.get("ANTHROPIC_API_KEY"):
 from engine import analyze_game, analyze_game_iter, get_followup_lines
 from tutor import explain_move, full_game_review, generate_concept_lesson, generate_ranked_lesson, generate_puzzle_hint, generate_puzzle_explanation, coach_chat_stream, parse_lesson_diagrams
 from profile import bulk_analyze_games, build_player_profile, PIECE_TIERS, SKILL_CATEGORIES
-from curriculum import CURRICULUM, get_stage_for_rating, get_recommended_modules, get_module, build_module_puzzles, validate_curriculum
+from curriculum import CURRICULUM, get_stage_for_rating, get_recommended_modules, get_module, build_module_puzzles, validate_curriculum, build_guided_path
 import db
 import chesscom
 import lichess
@@ -357,8 +357,124 @@ st.markdown("""
     /* ── Hide sidebar completely ──────────────────────────────────────────── */
     [data-testid="stSidebar"] { display: none !important; }
     [data-testid="collapsedControl"] { display: none !important; }
+
+    /* ── Fixed logo bar at top ────────────────────────────────────────────── */
+    #boardsense-logo-bar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 999999;
+        background: rgba(11, 14, 22, 0.92);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border-bottom: 1px solid #1a2a3e;
+        padding: 8px 24px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        pointer-events: none;
+    }
+    /* Push main content below the fixed bar */
+    .block-container {
+        padding-top: 3.2rem !important;
+    }
+
+    /* ── Mobile responsive ─────────────────────────────────────────────── */
+    @media (max-width: 768px) {
+        .block-container {
+            padding-left: 0.8rem !important;
+            padding-right: 0.8rem !important;
+        }
+        [data-baseweb="tab-list"] {
+            gap: 3px !important;
+            padding: 4px 0 8px !important;
+        }
+        button[data-baseweb="tab"] {
+            padding: 5px 10px !important;
+            font-size: 0.72em !important;
+        }
+        [data-testid="stHorizontalBlock"] {
+            flex-wrap: wrap !important;
+        }
+        [data-testid="column"] {
+            min-width: 140px !important;
+        }
+        #boardsense-logo-bar {
+            padding: 6px 12px;
+        }
+        #boardsense-logo-bar span:first-child {
+            font-size: 0.88em !important;
+        }
+        #boardsense-logo-bar span:last-child {
+            display: none;
+        }
+        /* Stack metric cards */
+        [data-testid="metric-container"] {
+            padding: 6px 8px;
+        }
+    }
+
+    @media (max-width: 480px) {
+        button[data-baseweb="tab"] {
+            padding: 4px 7px !important;
+            font-size: 0.65em !important;
+        }
+        .block-container {
+            padding-left: 0.4rem !important;
+            padding-right: 0.4rem !important;
+        }
+    }
+
+    /* ── Accessibility: focus indicators ──────────────────────────────── */
+    button:focus-visible,
+    [data-baseweb="tab"]:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
+    textarea:focus-visible {
+        outline: 2px solid #5a7ac8 !important;
+        outline-offset: 2px !important;
+    }
+
+    /* ── Skip-to-content link for keyboard users ─────────────────────── */
+    .skip-link {
+        position: absolute;
+        top: -40px;
+        left: 0;
+        background: #5a7ac8;
+        color: #fff;
+        padding: 8px 16px;
+        z-index: 1000000;
+        font-size: 0.85em;
+        font-weight: 700;
+        text-decoration: none;
+        border-radius: 0 0 8px 0;
+        transition: top 0.2s;
+    }
+    .skip-link:focus {
+        top: 0;
+    }
 </style>
 """, unsafe_allow_html=True)
+
+# ── Skip-to-content link (accessibility) ──────────────────────────────────
+st.markdown(
+    '<a href="#main-content" class="skip-link">Skip to main content</a>'
+    '<div id="main-content"></div>',
+    unsafe_allow_html=True,
+)
+
+# ── Fixed logo bar (stays visible on scroll) ─────────────────────────────────
+st.markdown(
+    '<div id="boardsense-logo-bar">'
+    '<span style="font-size:1.05em;font-weight:900;color:#e2c97e;letter-spacing:0.05em;'
+    'text-shadow:0 0 20px rgba(226,201,126,0.15);">'
+    '&#9812;&ensp;BOARDSENSE</span>'
+    '<span style="font-size:0.68em;font-weight:600;color:#4a6a80;letter-spacing:0.08em;'
+    'position:relative;top:-1px;">CHESS COACHING</span>'
+    '</div>',
+    unsafe_allow_html=True,
+)
 
 # ── Accessibility: High Contrast + Reduce Motion ─────────────────────────────
 if st.session_state.get("high_contrast"):
@@ -466,26 +582,36 @@ _ACHIEVEMENTS = {
     "first_review":     {"name": "Analyst",           "desc": "Review your first game",       "icon": "\U0001f50d"},
     "perfect_course":   {"name": "Perfect Score",     "desc": "Get 5/5 on a course quiz",     "icon": "\U0001f4af"},
     "profile_built":    {"name": "Identity",          "desc": "Build your player profile",    "icon": "\U0001f464"},
+    "streak_3d":        {"name": "Committed",          "desc": "3-day login streak",           "icon": "\U0001f4aa"},
+    "streak_7d":        {"name": "Dedicated",          "desc": "7-day login streak",           "icon": "\U0001f31f"},
+    "streak_30d":       {"name": "Legendary",          "desc": "30-day login streak",          "icon": "\U0001f451"},
+    "modules_10":       {"name": "Pathfinder",         "desc": "Complete 10 training modules", "icon": "\U0001f9ed"},
+    "opening_driller":  {"name": "Opening Scholar",    "desc": "Practice 5 opening drills",    "icon": "\U0001f4da"},
 }
 
 # ── DB init (runs once per session) ──────────────────────────────────────────
 if not st.session_state.get("_db_initialized"):
-    db.init_db()
-    for _concept, _content in db.get_all_lessons().items():
-        _lk = f"concept_lesson_{_concept.lower()}"
-        if _lk not in st.session_state:
-            st.session_state[_lk] = _content
-    _ps = db.get_puzzle_stats()
-    st.session_state.setdefault("puzzle_streak",      _ps["streak"])
-    st.session_state.setdefault("puzzle_best_streak", _ps["best_streak"])
-    st.session_state.setdefault("puzzle_recent",      _ps["recent"])
-    # Load persisted phase results
-    _pps = db.get_puzzle_phase_stats()
-    if _pps:
-        _ppr_loaded: dict[str, list] = {}
-        for _ph, _st in _pps.items():
-            _ppr_loaded[_ph] = [True] * _st["correct"] + [False] * (_st["attempted"] - _st["correct"])
-        st.session_state.setdefault("puzzle_phase_results", _ppr_loaded)
+    try:
+        db.init_db()
+        for _concept, _content in db.get_all_lessons().items():
+            _lk = f"concept_lesson_{_concept.lower()}"
+            if _lk not in st.session_state:
+                st.session_state[_lk] = _content
+        _ps = db.get_puzzle_stats()
+        st.session_state.setdefault("puzzle_streak",      _ps["streak"])
+        st.session_state.setdefault("puzzle_best_streak", _ps["best_streak"])
+        st.session_state.setdefault("puzzle_recent",      _ps["recent"])
+        # Load persisted phase results
+        _pps = db.get_puzzle_phase_stats()
+        if _pps:
+            _ppr_loaded: dict[str, list] = {}
+            for _ph, _st in _pps.items():
+                _ppr_loaded[_ph] = [True] * _st["correct"] + [False] * (_st["attempted"] - _st["correct"])
+            st.session_state.setdefault("puzzle_phase_results", _ppr_loaded)
+    except Exception as _init_err:
+        st.error(f"Database initialization issue: {_init_err}. Some features may be limited.")
+        import traceback
+        traceback.print_exc()
     # Auto-load last active user's profile
     _active = db.get_active_user()
     if _active and "profile_data" not in st.session_state:
@@ -507,6 +633,16 @@ if st.session_state.get("_puzzle_day") != _today:
     st.session_state._puzzle_day = _today
     st.session_state.puzzles_solved_today = 0
     st.session_state.puzzle_correct_today = 0
+
+# ── Session timer + login streak ────────────────────────────────────────────
+import time as _time_mod
+if "_session_start" not in st.session_state:
+    st.session_state._session_start = _time_mod.time()
+    st.session_state._session_puzzles = 0
+    st.session_state._session_lessons = 0
+    st.session_state._session_reviews = 0
+    _streak_info = db.update_login_streak()
+    st.session_state._login_streak = _streak_info
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -967,6 +1103,43 @@ def game_overview_panel(moves: list[dict], headers: dict):
     )
     st.markdown(html, unsafe_allow_html=True)
 
+    # Win probability cost by phase
+    _phase_wpl: dict[str, dict[str, float]] = {}
+    for m in non_book:
+        _mn = m["move_number"]
+        _ph = "opening" if _mn <= 12 else "endgame" if _mn >= 36 else "middlegame"
+        _col = m["color"]
+        _key = (_ph, _col)
+        _phase_wpl.setdefault(_key, 0.0)
+        _phase_wpl[_key] += m.get("wp_loss", 0)
+    _phase_labels = ["opening", "middlegame", "endgame"]
+    _phase_display = {"opening": "Opening", "middlegame": "Middlegame", "endgame": "Endgame"}
+    _wp_rows = ""
+    for _ph in _phase_labels:
+        _w_wpl = _phase_wpl.get((_ph, "white"), 0)
+        _b_wpl = _phase_wpl.get((_ph, "black"), 0)
+        if _w_wpl == 0 and _b_wpl == 0:
+            continue
+        _w_c = "#e57373" if _w_wpl >= 30 else "#ffb74d" if _w_wpl >= 15 else "#81c784"
+        _b_c = "#e57373" if _b_wpl >= 30 else "#ffb74d" if _b_wpl >= 15 else "#81c784"
+        _wp_rows += (
+            f'<div style="display:flex;justify-content:space-between;font-size:0.78em;'
+            f'padding:2px 0;">'
+            f'<span style="color:#8899aa;width:35%;">{_phase_display[_ph]}</span>'
+            f'<span style="color:{_w_c};width:30%;text-align:center;">{_w_wpl:.1f}%</span>'
+            f'<span style="color:{_b_c};width:30%;text-align:center;">{_b_wpl:.1f}%</span>'
+            f'</div>'
+        )
+    if _wp_rows:
+        st.markdown(
+            f'<div style="background:#111320;border:1px solid #1e2e3e;border-radius:8px;'
+            f'padding:8px 12px;margin-top:6px;">'
+            f'<div style="font-size:0.68em;color:#607d8b;font-weight:700;'
+            f'letter-spacing:0.06em;margin-bottom:4px;">WIN PROBABILITY COST BY PHASE</div>'
+            f'{_wp_rows}</div>',
+            unsafe_allow_html=True,
+        )
+
 
 def move_commentary_panel(move: dict, all_moves: list[dict], idx: int):
     cls       = move["classification"]
@@ -975,6 +1148,18 @@ def move_commentary_panel(move: dict, all_moves: list[dict], idx: int):
     mn        = move["move_number"]
     prefix    = f"{mn}." if move["color"] == "white" else f"{mn}..."
 
+    # Win probability loss and move accuracy
+    _wpl = move.get("wp_loss", 0)
+    _macc = move.get("move_accuracy", 0)
+    _wpl_color = "#e57373" if _wpl >= 20 else "#ffb74d" if _wpl >= 10 else "#fff176" if _wpl >= 5 else "#81c784"
+    _macc_color = "#81c784" if _macc >= 80 else "#ffb74d" if _macc >= 50 else "#e57373"
+    _extra_stats = (
+        f'<span style="color:{_wpl_color};font-size:0.78em;margin-left:8px;">'
+        f'WP loss: {_wpl:.1f}%</span>'
+        f'<span style="color:{_macc_color};font-size:0.78em;margin-left:8px;">'
+        f'Accuracy: {_macc:.0f}%</span>'
+    ) if cls not in ("book",) else ""
+
     st.markdown(
         f'<div style="border-left:4px solid {color_hex};padding:6px 10px;'
         f'background:#1a1a2e;border-radius:0 6px 6px 0;margin-bottom:6px;">'
@@ -982,6 +1167,7 @@ def move_commentary_panel(move: dict, all_moves: list[dict], idx: int):
         f'&nbsp;&nbsp;{classification_badge(cls)}<br>'
         f'<span style="color:#ccc;font-size:0.85em;">'
         f'Eval: {move["eval_before"]:+.2f} → {move["eval_after"]:+.2f}</span>'
+        f'{_extra_stats}'
         f'</div>',
         unsafe_allow_html=True,
     )
@@ -992,6 +1178,48 @@ def move_commentary_panel(move: dict, all_moves: list[dict], idx: int):
             f'Best move: <b>{move["best_move_san"]}</b></div>',
             unsafe_allow_html=True,
         )
+
+    # Top engine candidates (always visible, not just in Ask Tutor)
+    _cands = move.get("top_candidates", [])
+    if _cands and cls != "book":
+        _cand_parts = []
+        for _ci, _c in enumerate(_cands, 1):
+            _is_played = _c["san"] == move["move_san"]
+            _c_style = "color:#90caf9;font-weight:600;" if _ci == 1 else "color:#8899aa;"
+            _played_tag = ' <span style="color:#ffb74d;font-size:0.75em;">(played)</span>' if _is_played else ""
+            _cand_parts.append(
+                f'<span style="{_c_style}font-size:0.82em;">'
+                f'{_ci}. {_c["san"]} ({_c["eval"]:+.2f}){_played_tag}</span>'
+            )
+        st.markdown(
+            f'<div style="font-size:0.82em;color:#607d8b;margin-bottom:6px;">'
+            f'Engine top moves: {"&nbsp;&nbsp;".join(_cand_parts)}</div>',
+            unsafe_allow_html=True,
+        )
+
+    # "What if?" — show alternative continuation for blunders/mistakes
+    if cls in ("blunder", "mistake") and move.get("best_move_san") and move["best_move_san"] != move["move_san"]:
+        _whatif_key = f"_whatif_{mn}_{move['color']}"
+        if _whatif_key not in st.session_state and move.get("best_move_uci"):
+            try:
+                _wib = chess.Board(move["fen_before"])
+                _wib.push(chess.Move.from_uci(move["best_move_uci"]))
+                _wid = get_followup_lines(_wib.fen(), n_plies=4)
+                _wi_text = _format_followup(_wid.get("moves", []), _wid.get("evals", []))
+                st.session_state[_whatif_key] = _wi_text
+            except Exception:
+                st.session_state[_whatif_key] = ""
+        _wi_line = st.session_state.get(_whatif_key, "")
+        if _wi_line:
+            st.markdown(
+                f'<div style="background:#0d1f12;border:1px solid #1e3a25;border-radius:8px;'
+                f'padding:8px 12px;margin-bottom:8px;">'
+                f'<div style="font-size:0.68em;color:#81c784;font-weight:700;'
+                f'letter-spacing:0.04em;margin-bottom:3px;">IF YOU HAD PLAYED {move["best_move_san"]}</div>'
+                f'<div style="font-size:0.8em;color:#a5d6a7;">{_wi_line}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
     # Concepts are generated for notable classifications only
     _CONCEPT_CLS = {"blunder", "mistake", "brilliant", "best"}
@@ -1328,6 +1556,29 @@ def _check_puzzle_achievements():
         _check_achievement("streak_10")
 
 
+def _check_streak_achievements():
+    """Check login streak achievements."""
+    streak = st.session_state.get("_login_streak", {})
+    cur = streak.get("current", 0)
+    if cur >= 3:
+        _check_achievement("streak_3d")
+    if cur >= 7:
+        _check_achievement("streak_7d")
+    if cur >= 30:
+        _check_achievement("streak_30d")
+
+
+def _check_module_achievements():
+    """Check training module achievements."""
+    username = st.session_state.get("profile_username_built", "")
+    if not username:
+        return
+    progress = db.get_curriculum_progress(username)
+    completed = sum(1 for v in progress.values() if v.get("completed"))
+    if completed >= 10:
+        _check_achievement("modules_10")
+
+
 def _get_daily_goals() -> tuple[dict, dict]:
     """Get or create today's daily goals. Returns (targets, progress)."""
     from datetime import date as _dg_date
@@ -1586,7 +1837,7 @@ def render_game_review_tab():
         with cc_col1:
             username = st.text_input(
                 "Chess.com username", value="", key="cc_username",
-                placeholder="Enter username",
+                placeholder="e.g., magnuscarlsen",
             )
         with cc_col2:
             n_months = st.number_input(
@@ -1600,8 +1851,17 @@ def render_game_review_tab():
                         fetched = chesscom.fetch_recent_games(username, int(n_months))
                         st.session_state.chesscom_games    = fetched
                         st.session_state.chesscom_username = username
+                    except RuntimeError as e:
+                        st.error(f"{e}")
+                        return
                     except Exception as e:
-                        st.error(f"Failed to fetch games from Chess.com: {e}")
+                        err_str = str(e).lower()
+                        if "rate limit" in err_str or "429" in err_str or "403" in err_str:
+                            st.error("**Chess.com rate limit reached.** Please wait a few minutes and try again.")
+                        elif "timeout" in err_str or "timed out" in err_str:
+                            st.error("**Connection timed out.** Check your internet and try again.")
+                        else:
+                            st.error(f"Failed to fetch games from Chess.com: {e}")
                         return
 
         fetched_games = st.session_state.get("chesscom_games", [])
@@ -1628,7 +1888,8 @@ def render_game_review_tab():
         li_col1, li_col2, li_col3 = st.columns([2, 1, 1])
         with li_col1:
             li_username = st.text_input(
-                "Lichess username", value="", key="li_username"
+                "Lichess username", value="", key="li_username",
+                placeholder="e.g., DrNykterstein",
             )
         with li_col2:
             li_months = st.number_input(
@@ -1645,8 +1906,17 @@ def render_game_review_tab():
                         fetched = lichess.fetch_recent_games(li_username.strip(), int(li_months))
                         st.session_state.lichess_games    = fetched
                         st.session_state.lichess_username = li_username.strip()
+                    except RuntimeError as e:
+                        st.error(f"{e}")
+                        return
                     except Exception as e:
-                        st.error(f"Failed to fetch games from Lichess: {e}")
+                        err_str = str(e).lower()
+                        if "rate limit" in err_str or "429" in err_str:
+                            st.error("**Lichess rate limit reached.** Please wait a few minutes and try again.")
+                        elif "timeout" in err_str or "timed out" in err_str:
+                            st.error("**Connection timed out.** Check your internet and try again.")
+                        else:
+                            st.error(f"Failed to fetch games from Lichess: {e}")
                         return
 
         fetched_games = st.session_state.get("lichess_games", [])
@@ -1745,6 +2015,7 @@ def render_game_review_tab():
             st.session_state.current_game_id = game_id
             _check_achievement("first_review")
             _increment_daily_goal("review")
+            st.session_state._session_reviews = st.session_state.get("_session_reviews", 0) + 1
 
         st.rerun()
 
@@ -1752,7 +2023,7 @@ def render_game_review_tab():
     headers: dict     = st.session_state.headers
     total             = len(moves)
     if total == 0:
-        st.error("No moves found in PGN.")
+        st.error("No valid moves found in this game. Try exporting the PGN again from Chess.com or Lichess.")
         return
 
     idx = max(0, min(st.session_state.current_move_idx, total - 1))
@@ -1914,11 +2185,36 @@ def render_game_review_tab():
                 st.rerun()
 
         inject_keyboard_nav()
-        st.markdown(
-            '<div style="text-align:center;font-size:0.72em;color:#3a5070;margin-top:2px;">'
-            '&#8592; &#8594; arrow keys to navigate</div>',
-            unsafe_allow_html=True,
-        )
+
+        # ── Critical move jump buttons ─────────────────────────────────────
+        _critical_cls = {"blunder", "mistake", "brilliant"}
+        _prev_crit = None
+        _next_crit = None
+        for _ci in range(idx - 1, -1, -1):
+            if moves[_ci].get("classification") in _critical_cls:
+                _prev_crit = _ci
+                break
+        for _ci in range(idx + 1, total):
+            if moves[_ci].get("classification") in _critical_cls:
+                _next_crit = _ci
+                break
+        _crit_l, _crit_info, _crit_r = st.columns([1, 2, 1])
+        with _crit_l:
+            if st.button("< Prev Critical", disabled=_prev_crit is None,
+                         key="prev_crit", use_container_width=True):
+                st.session_state.current_move_idx = _prev_crit
+                st.rerun()
+        with _crit_info:
+            st.markdown(
+                '<div style="text-align:center;font-size:0.68em;color:#3a5070;padding-top:6px;">'
+                'Jump between blunders, mistakes, brilliancies</div>',
+                unsafe_allow_html=True,
+            )
+        with _crit_r:
+            if st.button("Next Critical >", disabled=_next_crit is None,
+                         key="next_crit", use_container_width=True):
+                st.session_state.current_move_idx = _next_crit
+                st.rerun()
 
         # ── Export Annotated PGN ──────────────────────────────────────────────
         pgn_data = _build_annotated_pgn(headers, moves)
@@ -2185,6 +2481,19 @@ def _render_concept_card(concept: dict, puzzle_count: int = 0):
         badge_parts.append(
             f'<span style="font-size:0.67em;color:{_sc_color};white-space:nowrap;">'
             f'Last: {_s}/{_t}</span>'
+        )
+    # Concept mastery badge from puzzle performance
+    _cm_all = st.session_state.get("_concept_mastery_cache")
+    if _cm_all is None:
+        _cm_all = db.get_all_concept_mastery()
+        st.session_state["_concept_mastery_cache"] = _cm_all
+    _cm_data = _cm_all.get(name)
+    if _cm_data and _cm_data["attempted"] >= 2:
+        _cm_pct = _cm_data["pct"]
+        _cm_color = "#81c784" if _cm_pct >= 80 else "#ffb74d" if _cm_pct >= 50 else "#e57373"
+        badge_parts.append(
+            f'<span style="font-size:0.67em;color:{_cm_color};white-space:nowrap;">'
+            f'Puzzles: {_cm_data["correct"]}/{_cm_data["attempted"]}</span>'
         )
 
     badge_row = (
@@ -2694,11 +3003,15 @@ def _render_concept_detail(concept: str, *, show_header: bool = True):
         else:
             with lesson_area.container():
                 _render_lesson_loading_card(concept)
-            st.session_state[lesson_key] = generate_concept_lesson(concept, examples)
+            _enriched = _build_enriched_examples(concept, examples)
+            st.session_state[lesson_key] = generate_concept_lesson(
+                concept, examples, enriched_examples=_enriched if _enriched else None,
+            )
             _count_lesson_gen()
             db.save_lesson(concept, st.session_state[lesson_key])
             _check_achievement("first_lesson")
             _increment_daily_goal("lessons")
+            st.session_state._session_lessons = st.session_state.get("_session_lessons", 0) + 1
             # Check if all concept lessons are now generated
             _all_done = all(
                 f"concept_lesson_{c['name'].lower()}" in st.session_state
@@ -2721,10 +3034,14 @@ def _render_concept_detail(concept: str, *, show_header: bool = True):
                 _render_lesson_diagrams(_lesson_diagrams, concept)
 
     _regen_disabled = _lesson_gen_remaining() <= 0
-    if st.button("↺ Regenerate lesson", key="regen_lesson", disabled=_regen_disabled):
+    _regen_help = "Daily generation limit reached — resets tomorrow." if _regen_disabled else "Generate a fresh explanation (limited to 50/day)."
+    if st.button("↺ Regenerate lesson", key="regen_lesson", disabled=_regen_disabled, help=_regen_help):
         with lesson_area.container():
             _render_lesson_loading_card(concept, regenerating=True)
-        st.session_state[lesson_key] = generate_concept_lesson(concept, examples)
+        _enriched = _build_enriched_examples(concept, examples)
+        st.session_state[lesson_key] = generate_concept_lesson(
+            concept, examples, enriched_examples=_enriched if _enriched else None,
+        )
         _count_lesson_gen()
         db.save_lesson(concept, st.session_state[lesson_key])
         st.rerun()
@@ -2760,9 +3077,80 @@ def _render_concept_detail(concept: str, *, show_header: bool = True):
         else:
             st.markdown(
                 '<p style="font-size:0.82em;color:#5a7a8a;margin:0 0 8px;">'
-                'No practice puzzles found in your games yet — play more games or load a profile.</p>',
+                'No practice puzzles found for this concept yet — rebuild your profile '
+                'with more months of games to unlock puzzles from your own play.</p>',
                 unsafe_allow_html=True,
             )
+
+
+def _build_enriched_examples(concept: str, basic_examples: list[dict] | None = None) -> list[dict]:
+    """
+    Build enriched_examples for generate_concept_lesson by matching concept examples
+    to critical_moves from profile summaries (which have FENs, evals, best moves).
+    Falls back to scanning all critical moves if no direct match.
+    """
+    summaries = st.session_state.get("profile_summaries", [])
+    if not summaries:
+        return []
+
+    # Collect all critical moves with full engine data
+    all_critical: list[dict] = []
+    for s in summaries:
+        for cm in s.get("critical_moves", []):
+            if cm.get("fen_before"):
+                all_critical.append(cm)
+
+    if not all_critical:
+        return []
+
+    enriched: list[dict] = []
+
+    # Try to match basic examples to critical moves by move_number + move_san
+    if basic_examples:
+        for ex in basic_examples[:3]:
+            for cm in all_critical:
+                if (cm.get("move_number") == ex.get("move_number")
+                        and cm.get("move_san") == ex.get("move_san")
+                        and cm.get("color") == ex.get("color")):
+                    enriched.append({
+                        "fen": cm["fen_before"],
+                        "move_san": cm["move_san"],
+                        "best_move_san": cm.get("best_move_san", ""),
+                        "eval_before": cm.get("eval_before", 0),
+                        "eval_after": cm.get("eval_after", 0),
+                        "classification": cm.get("classification", ""),
+                        "phase": cm.get("phase", ""),
+                        "move_number": cm.get("move_number", 0),
+                        "color": cm.get("color", ""),
+                    })
+                    break
+
+    # If we found fewer than 2 direct matches, supplement with the concept's
+    # category-relevant critical moves (biggest eval swings)
+    if len(enriched) < 2:
+        used_keys = {(e["move_number"], e["color"], e["move_san"]) for e in enriched}
+        remaining = [
+            cm for cm in all_critical
+            if (cm.get("move_number"), cm.get("color"), cm.get("move_san")) not in used_keys
+        ]
+        remaining.sort(
+            key=lambda c: abs(c.get("eval_before", 0) - c.get("eval_after", 0)),
+            reverse=True,
+        )
+        for cm in remaining[:3 - len(enriched)]:
+            enriched.append({
+                "fen": cm["fen_before"],
+                "move_san": cm["move_san"],
+                "best_move_san": cm.get("best_move_san", ""),
+                "eval_before": cm.get("eval_before", 0),
+                "eval_after": cm.get("eval_after", 0),
+                "classification": cm.get("classification", ""),
+                "phase": cm.get("phase", ""),
+                "move_number": cm.get("move_number", 0),
+                "color": cm.get("color", ""),
+            })
+
+    return enriched
 
 
 def _find_reference_game(concept: str) -> dict | None:
@@ -2845,7 +3233,10 @@ def render_course_view():
             else:
                 with lesson_area.container():
                     _render_lesson_loading_card(concept)
-                st.session_state[lesson_key] = generate_concept_lesson(concept, [])
+                _enriched = _build_enriched_examples(concept)
+                st.session_state[lesson_key] = generate_concept_lesson(
+                    concept, [], enriched_examples=_enriched if _enriched else None,
+                )
                 _count_lesson_gen()
                 db.save_lesson(concept, st.session_state[lesson_key])
 
@@ -2985,12 +3376,7 @@ def render_course_view():
         f'&nbsp;·&nbsp;'
         f'<span style="color:#a0bccc;font-size:0.82em;">Puzzle {step} / {total}</span>'
         + (f'&nbsp;{classification_badge(cls)}' if cls else '')
-        + '</div>'
-        f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
-        f'<div style="font-size:1.05em;font-weight:700;color:#cce0f4;">'
-        f'Find the best move for&nbsp;<span style="color:{pz_accent};">{pz_icon}&nbsp;{color_cap}</span>'
-        f'</div></div>'
-        f'<div style="font-size:0.78em;color:#607d8b;margin-bottom:8px;">Click or drag a piece to its destination</div>',
+        + '</div>',
         unsafe_allow_html=True,
     )
 
@@ -3018,54 +3404,69 @@ def render_course_view():
     reveal_now = st.session_state.pop(f"_reveal_course_{puz_idx}", False)
     has_hint = bool(puzzle.get("hint"))
 
-    # Interactive board (drilldown mode: puzzle_idx=-1 so no auto-advance)
-    st.components.v1.html(
-        _interactive_board_html(
-            fen=puzzle["fen"],
-            best_move_san=puzzle["best_move_san"],
-            eval_before=puzzle["eval_before"],
-            eval_after=puzzle["eval_after"],
-            player_color=puzzle["player_color"],
-            puzzle_idx=-1,
-            phases=puzzle.get("phases"),
-            reveal_solution=reveal_now,
-            highlight_hint=(has_hint and not reveal_now),
-        ),
-        height=_board_iframe_height(),
-        scrolling=False,
-    )
+    # Two-column layout: board left, controls right
+    _course_board_col, _course_ctrl_col = st.columns([3, 1.2])
 
-    # Coaching hint → Show Move (immediately below board)
-    if puzzle.get("hint"):
-        _render_hint_card(puzzle["hint"])
-        if st.button("▶ Show Move", key=f"course_showmove_{puz_idx}", use_container_width=True):
-            st.session_state[f"_reveal_course_{puz_idx}"] = True
-            st.rerun()
-    else:
-        if st.button("💡 Get Hint", key=f"course_hint_{puz_idx}", use_container_width=True):
-            if not _api_limit_reached():
-                _count_api_call()
-                with st.spinner("Thinking…"):
-                    try:
-                        puzzle["hint"] = generate_puzzle_hint(
-                            puzzle["fen"],
-                            puzzle["best_move_san"],
-                            puzzle["player_color"],
-                            puzzle["classification"],
-                        )
-                    except Exception:
-                        puzzle["hint"] = "Focus on piece coordination and look for tactical opportunities."
+    with _course_board_col:
+        st.components.v1.html(
+            _interactive_board_html(
+                fen=puzzle["fen"],
+                best_move_san=puzzle["best_move_san"],
+                eval_before=puzzle["eval_before"],
+                eval_after=puzzle["eval_after"],
+                player_color=puzzle["player_color"],
+                puzzle_idx=-1,
+                phases=puzzle.get("phases"),
+                reveal_solution=reveal_now,
+                highlight_hint=(has_hint and not reveal_now),
+            ),
+            height=_board_iframe_height(),
+            scrolling=False,
+        )
+
+    with _course_ctrl_col:
+        st.markdown(
+            f'<div style="font-size:1.05em;font-weight:700;color:#cce0f4;margin-bottom:4px;">'
+            f'Find the best move</div>'
+            f'<div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;">'
+            f'<span style="color:{pz_accent};font-size:1.1em;">{pz_icon}</span>'
+            f'<span style="font-size:0.92em;font-weight:600;color:{pz_accent};">{color_cap} to play</span>'
+            f'</div>'
+            f'<div style="font-size:0.78em;color:#607d8b;margin-bottom:16px;">'
+            f'Click or drag a piece to its destination</div>',
+            unsafe_allow_html=True,
+        )
+
+        # Coaching hint → Show Move
+        if puzzle.get("hint"):
+            _render_hint_card(puzzle["hint"])
+            if st.button("▶ Show Move", key=f"course_showmove_{puz_idx}", use_container_width=True):
+                st.session_state[f"_reveal_course_{puz_idx}"] = True
                 st.rerun()
+        else:
+            if st.button("💡 Get Hint", key=f"course_hint_{puz_idx}", use_container_width=True):
+                if not _api_limit_reached():
+                    _count_api_call()
+                    with st.spinner("Thinking…"):
+                        try:
+                            puzzle["hint"] = generate_puzzle_hint(
+                                puzzle["fen"],
+                                puzzle["best_move_san"],
+                                puzzle["player_color"],
+                                puzzle["classification"],
+                                eval_before=puzzle.get("eval_before"),
+                                eval_after=puzzle.get("eval_after"),
+                            )
+                        except Exception:
+                            puzzle["hint"] = "Focus on piece coordination and look for tactical opportunities."
+                    st.rerun()
 
-    # Self-report result buttons
-    st.markdown('<div style="height:4px;"></div>', unsafe_allow_html=True)
-    got_col, miss_col = st.columns(2)
-    with got_col:
+        # Self-report result buttons
+        st.markdown('<div style="height:12px;"></div>', unsafe_allow_html=True)
         if st.button("✓ Got it", key=f"course_got_{puz_idx}", type="primary", use_container_width=True):
             st.session_state.active_course["results"].append(True)
             st.session_state.active_course["step"] += 1
             st.rerun()
-    with miss_col:
         if st.button("✗ Missed it", key=f"course_miss_{puz_idx}", use_container_width=True):
             st.session_state.active_course["results"].append(False)
             st.session_state.active_course["step"] += 1
@@ -3155,7 +3556,11 @@ def _bulk_generate_lessons(concepts: list[dict]):
             text=f"Generating lesson {i + 1} of {len(to_generate)}: {c['name']}...",
         )
         examples = c.get("examples", [])[:3]
-        lesson = generate_concept_lesson(c["name"], examples if examples else None)
+        _enriched = _build_enriched_examples(c["name"], examples)
+        lesson = generate_concept_lesson(
+            c["name"], examples if examples else None,
+            enriched_examples=_enriched if _enriched else None,
+        )
         _count_lesson_gen()
         db.save_lesson(c["name"], lesson)
         st.session_state[f"concept_lesson_{c['name'].lower()}"] = lesson
@@ -3366,6 +3771,22 @@ def _build_puzzle_queue() -> list[dict]:
                 _vboard.parse_san(cm["best_move_san"])
             except Exception:
                 continue
+            # Tag with chess concepts at build time
+            _puz_concepts = []
+            for _pc_cat, _pc_names in CONCEPT_LIBRARY.items():
+                for _pc_name in _pc_names:
+                    if _pc_name in _THEORY_ONLY_CONCEPTS:
+                        continue
+                    try:
+                        if _position_has_concept(cm["fen_before"], _pc_name,
+                                                 cm["best_move_san"], cm.get("color", "white")):
+                            _puz_concepts.append(_pc_name)
+                            if len(_puz_concepts) >= 3:
+                                break
+                    except Exception:
+                        pass
+                if len(_puz_concepts) >= 3:
+                    break
             puzzles.append({
                 "fen":            cm["fen_before"],
                 "best_move_san":  cm["best_move_san"],
@@ -3378,6 +3799,7 @@ def _build_puzzle_queue() -> list[dict]:
                 "move_number":    cm.get("move_number", 0),
                 "opponent":       opponent,
                 "date":           s.get("date", "")[:7],
+                "concepts":       _puz_concepts,
             })
 
     # Weight toward weakest phase — duplicate those puzzles so they appear ~2×
@@ -4005,7 +4427,8 @@ def _render_ttr_module_flow():
 
     # ── Step 0: Lesson ────────────────────────────────────────────────────────
     if step == 0:
-        if st.button("← Back to Stage", key="ttr_mod_back"):
+        _back_label = "← Back to My Path" if mod_state.get("from_guided_path") else "← Back to Stage"
+        if st.button(_back_label, key="ttr_mod_back"):
             st.session_state.pop("active_module", None)
             st.rerun()
 
@@ -4098,13 +4521,7 @@ def _render_ttr_module_flow():
             f'&nbsp;·&nbsp;'
             f'<span style="color:#a0bccc;font-size:0.82em;">Puzzle {puz_idx + 1} / {total_puzzles}</span>'
             + (f'&nbsp;{classification_badge(cls)}' if cls else '')
-            + '</div>'
-            f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
-            f'<div style="font-size:1.05em;font-weight:700;color:#cce0f4;">'
-            f'Find the best move for&nbsp;<span style="color:{pz_accent};">{pz_icon}&nbsp;{color_cap}</span>'
-            f'</div></div>'
-            f'<div style="font-size:0.78em;color:#607d8b;margin-bottom:8px;">'
-            f'Click or drag a piece to its destination</div>',
+            + '</div>',
             unsafe_allow_html=True,
         )
 
@@ -4132,54 +4549,69 @@ def _render_ttr_module_flow():
         reveal_now = st.session_state.pop(f"_reveal_ttr_{puz_idx}", False)
         has_hint = bool(puzzle.get("hint"))
 
-        # Interactive board
-        st.components.v1.html(
-            _interactive_board_html(
-                fen=puzzle["fen"],
-                best_move_san=puzzle["best_move_san"],
-                eval_before=puzzle["eval_before"],
-                eval_after=puzzle["eval_after"],
-                player_color=puzzle["player_color"],
-                puzzle_idx=-1,
-                phases=puzzle.get("phases"),
-                reveal_solution=reveal_now,
-                highlight_hint=(has_hint and not reveal_now),
-            ),
-            height=_board_iframe_height(),
-            scrolling=False,
-        )
+        # Two-column layout: board left, controls right
+        _ttr_board_col, _ttr_ctrl_col = st.columns([3, 1.2])
 
-        # Coaching hint → Show Move
-        if puzzle.get("hint"):
-            _render_hint_card(puzzle["hint"])
-            if st.button("▶ Show Move", key=f"ttr_showmove_{puz_idx}", use_container_width=True):
-                st.session_state[f"_reveal_ttr_{puz_idx}"] = True
-                st.rerun()
-        else:
-            if st.button("💡 Get Hint", key=f"ttr_hint_{puz_idx}", use_container_width=True):
-                if not _api_limit_reached():
-                    _count_api_call()
-                    with st.spinner("Thinking\u2026"):
-                        try:
-                            puzzle["hint"] = generate_puzzle_hint(
-                                puzzle["fen"],
-                                puzzle["best_move_san"],
-                                puzzle["player_color"],
-                                puzzle.get("classification", ""),
-                            )
-                        except Exception:
-                            puzzle["hint"] = "Focus on piece coordination and look for tactical opportunities."
+        with _ttr_board_col:
+            st.components.v1.html(
+                _interactive_board_html(
+                    fen=puzzle["fen"],
+                    best_move_san=puzzle["best_move_san"],
+                    eval_before=puzzle["eval_before"],
+                    eval_after=puzzle["eval_after"],
+                    player_color=puzzle["player_color"],
+                    puzzle_idx=-1,
+                    phases=puzzle.get("phases"),
+                    reveal_solution=reveal_now,
+                    highlight_hint=(has_hint and not reveal_now),
+                ),
+                height=_board_iframe_height(),
+                scrolling=False,
+            )
+
+        with _ttr_ctrl_col:
+            st.markdown(
+                f'<div style="font-size:1.05em;font-weight:700;color:#cce0f4;margin-bottom:4px;">'
+                f'Find the best move</div>'
+                f'<div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;">'
+                f'<span style="color:{pz_accent};font-size:1.1em;">{pz_icon}</span>'
+                f'<span style="font-size:0.92em;font-weight:600;color:{pz_accent};">{color_cap} to play</span>'
+                f'</div>'
+                f'<div style="font-size:0.78em;color:#607d8b;margin-bottom:16px;">'
+                f'Click or drag a piece to its destination</div>',
+                unsafe_allow_html=True,
+            )
+
+            # Coaching hint → Show Move
+            if puzzle.get("hint"):
+                _render_hint_card(puzzle["hint"])
+                if st.button("▶ Show Move", key=f"ttr_showmove_{puz_idx}", use_container_width=True):
+                    st.session_state[f"_reveal_ttr_{puz_idx}"] = True
                     st.rerun()
+            else:
+                if st.button("💡 Get Hint", key=f"ttr_hint_{puz_idx}", use_container_width=True):
+                    if not _api_limit_reached():
+                        _count_api_call()
+                        with st.spinner("Thinking\u2026"):
+                            try:
+                                puzzle["hint"] = generate_puzzle_hint(
+                                    puzzle["fen"],
+                                    puzzle["best_move_san"],
+                                    puzzle["player_color"],
+                                    puzzle.get("classification", ""),
+                                    eval_before=puzzle.get("eval_before"),
+                                    eval_after=puzzle.get("eval_after"),
+                                )
+                            except Exception:
+                                puzzle["hint"] = "Focus on piece coordination and look for tactical opportunities."
+                        st.rerun()
 
-        # Self-report result buttons
-        st.markdown('<div style="height:4px;"></div>', unsafe_allow_html=True)
-        got_col, miss_col = st.columns(2)
-        with got_col:
+            # Self-report result buttons
+            st.markdown('<div style="height:12px;"></div>', unsafe_allow_html=True)
             if st.button("✓ Got it", key=f"ttr_got_{puz_idx}", type="primary", use_container_width=True):
                 st.session_state.active_module["results"].append(True)
                 st.session_state.active_module["step"] += 1
                 st.rerun()
-        with miss_col:
             if st.button("✗ Missed it", key=f"ttr_miss_{puz_idx}", use_container_width=True):
                 st.session_state.active_module["results"].append(False)
                 st.session_state.active_module["step"] += 1
@@ -4232,10 +4664,12 @@ def _render_ttr_module_flow():
     username = _ttr_get_username()
     if total_puzzles > 0:
         db.save_module_progress(username, mid, n_correct, total_puzzles)
+        _check_module_achievements()
 
     st.markdown('<div style="height:6px;"></div>', unsafe_allow_html=True)
 
     # Action buttons
+    from_path = mod_state.get("from_guided_path", False)
     retry_col, back_col, next_col = st.columns(3)
     with retry_col:
         if st.button("↺ Retry Module", key="ttr_retry", use_container_width=True):
@@ -4249,33 +4683,269 @@ def _render_ttr_module_flow():
             })
             st.rerun()
     with back_col:
-        if st.button("← Back to Stage", key="ttr_back_stage", use_container_width=True):
+        back_label = "← Back to My Path" if from_path else "← Back to Stage"
+        if st.button(back_label, key="ttr_back_stage", use_container_width=True):
             st.session_state.pop("active_module", None)
             st.rerun()
     with next_col:
-        # Find next module in stage
-        if module_data and stage:
-            mods = stage["modules"]
-            cur_idx = next((i for i, m in enumerate(mods) if m["id"] == mid), -1)
-            if cur_idx >= 0 and cur_idx + 1 < len(mods):
-                next_mod = mods[cur_idx + 1]
-                if st.button(f"Next: {next_mod['title']} →", key="ttr_next_mod",
+        if from_path:
+            # Find next uncompleted module in the guided path
+            _gp_username = _ttr_get_username()
+            _gp_progress = db.get_curriculum_progress(_gp_username)
+            _gp_path = build_guided_path(
+                st.session_state.get("profile_data"),
+                st.session_state.get("profile_summaries"),
+                _gp_progress,
+                _ttr_get_rating(),
+            )
+            _gp_next = next((m for m in _gp_path if not m["completed"] and m["module_id"] != mid), None)
+            if _gp_next:
+                if st.button(f"Next: {_gp_next['title']} →", key="ttr_next_mod",
                              use_container_width=True):
-                    new_puzs = build_module_puzzles(
-                        next_mod,
-                        st.session_state.get("profile_summaries"),
+                    _gp_mod = get_module(_gp_next["module_id"])
+                    if _gp_mod:
+                        new_puzs = build_module_puzzles(
+                            _gp_mod,
+                            st.session_state.get("profile_summaries"),
+                        )
+                        st.session_state.active_module = {
+                            "stage": _gp_next["stage"],
+                            "module_id": _gp_next["module_id"],
+                            "title": _gp_mod["title"],
+                            "concept": _gp_mod["concept"],
+                            "step": 0,
+                            "puzzles": new_puzs,
+                            "results": [],
+                            "walkthrough_step": 0,
+                            "from_guided_path": True,
+                        }
+                        st.rerun()
+        else:
+            # Find next module in stage
+            if module_data and stage:
+                mods = stage["modules"]
+                cur_idx = next((i for i, m in enumerate(mods) if m["id"] == mid), -1)
+                if cur_idx >= 0 and cur_idx + 1 < len(mods):
+                    next_mod = mods[cur_idx + 1]
+                    if st.button(f"Next: {next_mod['title']} →", key="ttr_next_mod",
+                                 use_container_width=True):
+                        new_puzs = build_module_puzzles(
+                            next_mod,
+                            st.session_state.get("profile_summaries"),
+                        )
+                        st.session_state.active_module = {
+                            "stage": stage_num,
+                            "module_id": next_mod["id"],
+                            "title": next_mod["title"],
+                            "concept": next_mod["concept"],
+                            "step": 0,
+                            "puzzles": new_puzs,
+                            "results": [],
+                            "walkthrough_step": 0,
+                        }
+                        st.rerun()
+
+
+def render_guided_path():
+    """My Path — a personalised, ordered learning queue based on player weaknesses."""
+    # ── If a module is active, delegate to the standard module flow ────────
+    if "active_module" in st.session_state:
+        _render_ttr_module_flow()
+        return
+
+    # ── Require a profile ──────────────────────────────────────────────────
+    profile_data = st.session_state.get("profile_data")
+    profile_summaries = st.session_state.get("profile_summaries")
+    if not profile_data or not profile_summaries:
+        st.markdown(
+            '<div style="text-align:center;padding:40px 0;">'
+            '<div style="font-size:2.2em;margin-bottom:12px;">&#9813;</div>'
+            '<div style="font-size:1.05em;font-weight:700;color:#cce0f4;margin-bottom:8px;">'
+            'Build your profile to unlock My Path</div>'
+            '<div style="font-size:0.85em;color:#7a9ab0;max-width:400px;margin:0 auto;">'
+            'My Path creates a personalised learning sequence based on your games. '
+            'Build your profile from the <b style="color:#e2c97e;">Dashboard</b> to get started.</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+        if st.button("Go to Dashboard", key="gp_to_dash"):
+            st.session_state.navigate_to_dashboard = True
+            st.rerun()
+        return
+
+    username = _ttr_get_username()
+    rating = _ttr_get_rating()
+    progress = db.get_curriculum_progress(username)
+    path = build_guided_path(profile_data, profile_summaries, progress, rating)
+
+    if not path:
+        st.info("No modules available.")
+        return
+
+    # Split into up-next and completed
+    up_next = [m for m in path if not m["completed"]]
+    done = [m for m in path if m["completed"]]
+
+    n_total = len(path)
+    n_done = len(done)
+    pct = round(100 * n_done / n_total) if n_total else 0
+
+    # ── Header ─────────────────────────────────────────────────────────────
+    st.markdown(
+        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">'
+        '<span style="font-size:1.3em;font-weight:800;color:#e2c97e;">My Path</span>'
+        '<span style="font-size:0.82em;color:#7a9ab0;">Your personalised learning sequence</span>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Overall progress
+    bar_color = "#81c784" if pct == 100 else "#5a7ac8"
+    st.markdown(
+        f'<div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">'
+        f'<div style="flex:1;height:6px;background:#1e2e3e;border-radius:3px;overflow:hidden;">'
+        f'<div style="width:{pct}%;height:100%;background:{bar_color};border-radius:3px;'
+        f'transition:width 0.4s ease;"></div></div>'
+        f'<span style="font-size:0.82em;font-weight:600;color:#8ab4d0;">'
+        f'{n_done}/{n_total} completed</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── Current module — big hero card ─────────────────────────────────────
+    if up_next:
+        current = up_next[0]
+        _reason_colors = {
+            "priority focus area": ("#b39ddb", "#2a1a40"),
+            "targets your weaknesses": ("#ffb74d", "#3a2a10"),
+            "at your level": ("#4fc3f7", "#0a2a40"),
+            "curriculum": ("#5a8ab0", "#0d1525"),
+        }
+        badge_fg, badge_bg = _reason_colors.get(current["reason"], ("#5a8ab0", "#0d1525"))
+
+        # Check if previously attempted
+        cprog = progress.get(current["module_id"])
+        attempt_text = ""
+        if cprog and cprog["attempts"] > 0:
+            attempt_text = (
+                f'<div style="font-size:0.78em;color:#5a8ab0;margin-top:6px;">'
+                f'Previous best: {cprog["best_score"]}/{cprog["total"]}'
+                f' &middot; {cprog["attempts"]} attempt{"s" if cprog["attempts"] != 1 else ""}</div>'
+            )
+
+        st.markdown(
+            f'<div style="background:linear-gradient(135deg,#0d1f30 0%,#152a40 100%);'
+            f'border:2px solid #3a6ea5;border-radius:12px;padding:20px 24px;margin-bottom:18px;">'
+            f'<div style="font-size:0.72em;font-weight:700;color:#5a8ab0;letter-spacing:0.08em;'
+            f'text-transform:uppercase;margin-bottom:8px;">UP NEXT</div>'
+            f'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
+            f'<span style="font-size:1.2em;font-weight:700;color:#cce0f4;">{current["title"]}</span>'
+            f'<span style="font-size:0.78em;color:#5a8ab0;">Stage {current["stage"]}</span>'
+            f'<span style="font-size:0.68em;font-weight:600;color:{badge_fg};background:{badge_bg};'
+            f'padding:2px 8px;border-radius:4px;text-transform:uppercase;">{current["reason"]}</span>'
+            f'</div>'
+            f'<div style="font-size:0.85em;color:#8aaac8;margin-top:6px;">'
+            f'Concept: <b style="color:#cce0f4;">{current["concept"]}</b></div>'
+            f'{attempt_text}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+        if st.button(
+            f"Start {current['title']}", key="gp_start_current",
+            type="primary", use_container_width=True,
+        ):
+            mod = get_module(current["module_id"])
+            if mod:
+                puzzles = build_module_puzzles(mod, profile_summaries)
+                st.session_state.active_module = {
+                    "stage": current["stage"],
+                    "module_id": current["module_id"],
+                    "title": mod["title"],
+                    "concept": mod["concept"],
+                    "step": 0,
+                    "puzzles": puzzles,
+                    "results": [],
+                    "walkthrough_step": 0,
+                    "from_guided_path": True,
+                }
+                st.rerun()
+
+    # ── Upcoming queue ─────────────────────────────────────────────────────
+    remaining = up_next[1:]
+    if remaining:
+        st.markdown(
+            '<div style="font-size:0.75em;font-weight:700;color:#5a7a8a;letter-spacing:0.08em;'
+            'text-transform:uppercase;margin:20px 0 10px;">COMING UP</div>',
+            unsafe_allow_html=True,
+        )
+        # Show first 10, with expand option
+        _show_count = 10
+        _to_show = remaining[:_show_count]
+        for i, m in enumerate(_to_show):
+            _r_colors = {
+                "priority focus area": "#b39ddb",
+                "targets your weaknesses": "#ffb74d",
+                "at your level": "#4fc3f7",
+                "curriculum": "#3a5a7a",
+            }
+            dot_color = _r_colors.get(m["reason"], "#3a5a7a")
+            st.markdown(
+                f'<div style="display:flex;align-items:center;gap:10px;'
+                f'padding:8px 14px;border-bottom:1px solid #1a2a3a;">'
+                f'<span style="font-size:0.82em;font-weight:700;color:#3a5a7a;min-width:24px;">'
+                f'{i + 2}</span>'
+                f'<span style="width:8px;height:8px;border-radius:50%;background:{dot_color};'
+                f'flex-shrink:0;"></span>'
+                f'<div style="flex:1;">'
+                f'<span style="font-size:0.88em;font-weight:600;color:#cce0f4;">{m["title"]}</span>'
+                f'<span style="font-size:0.75em;color:#5a8ab0;margin-left:8px;">'
+                f'Stage {m["stage"]} &middot; {m["concept"]}</span>'
+                f'</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+        if len(remaining) > _show_count:
+            with st.expander(f"Show all {len(remaining)} upcoming modules"):
+                for i, m in enumerate(remaining[_show_count:]):
+                    st.markdown(
+                        f'<div style="display:flex;align-items:center;gap:10px;'
+                        f'padding:6px 14px;border-bottom:1px solid #1a2a3a;">'
+                        f'<span style="font-size:0.82em;color:#3a5a7a;min-width:24px;">'
+                        f'{i + _show_count + 2}</span>'
+                        f'<span style="font-size:0.88em;color:#8aaac8;">{m["title"]}</span>'
+                        f'<span style="font-size:0.75em;color:#5a8ab0;margin-left:8px;">'
+                        f'Stage {m["stage"]}</span>'
+                        f'</div>',
+                        unsafe_allow_html=True,
                     )
-                    st.session_state.active_module = {
-                        "stage": stage_num,
-                        "module_id": next_mod["id"],
-                        "title": next_mod["title"],
-                        "concept": next_mod["concept"],
-                        "step": 0,
-                        "puzzles": new_puzs,
-                        "results": [],
-                        "walkthrough_step": 0,
-                    }
-                    st.rerun()
+
+    # ── Completed modules ──────────────────────────────────────────────────
+    if done:
+        st.markdown(
+            f'<div style="font-size:0.75em;font-weight:700;color:#5a7a8a;letter-spacing:0.08em;'
+            f'text-transform:uppercase;margin:24px 0 10px;">COMPLETED ({len(done)})</div>',
+            unsafe_allow_html=True,
+        )
+        for m in done:
+            cprog = progress.get(m["module_id"], {})
+            best = cprog.get("best_score", 0)
+            total = cprog.get("total", 0)
+            score_text = f"{best}/{total}" if total else ""
+            st.markdown(
+                f'<div style="display:flex;align-items:center;gap:10px;'
+                f'padding:8px 14px;border-bottom:1px solid #1a2a3a;opacity:0.7;">'
+                f'<span style="font-size:1em;color:#81c784;">&#10003;</span>'
+                f'<div style="flex:1;">'
+                f'<span style="font-size:0.88em;color:#8aaac8;">{m["title"]}</span>'
+                f'<span style="font-size:0.75em;color:#5a8ab0;margin-left:8px;">'
+                f'Stage {m["stage"]}</span>'
+                f'</div>'
+                f'<span style="font-size:0.78em;color:#81c784;font-weight:600;">{score_text}</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
 
 def render_training_tab():
@@ -4432,12 +5102,15 @@ def render_puzzles_tab():
         _ppr = st.session_state.setdefault("puzzle_phase_results", {})
         _ppr.setdefault(_phase, []).append(True)
         db.update_puzzle_phase(_phase, True)
+        for _pc in puzzle.get("concepts", []):
+            db.update_concept_mastery(_pc, True)
         st.session_state.puzzles_solved_today = st.session_state.get("puzzles_solved_today", 0) + 1
         st.session_state.puzzle_correct_today = st.session_state.get("puzzle_correct_today", 0) + 1
         st.session_state.puzzle_explanation_pending = True
         st.session_state.puzzle_explanation_correct = True
         _check_puzzle_achievements()
         _increment_daily_goal("puzzles")
+        st.session_state._session_puzzles = st.session_state.get("_session_puzzles", 0) + 1
         st.rerun()
     if _puz_aw:
         new_recent = (st.session_state.get("puzzle_recent", []) + [False])[-10:]
@@ -4448,6 +5121,8 @@ def render_puzzles_tab():
         _ppr = st.session_state.setdefault("puzzle_phase_results", {})
         _ppr.setdefault(_phase, []).append(False)
         db.update_puzzle_phase(_phase, False)
+        for _pc in puzzle.get("concepts", []):
+            db.update_concept_mastery(_pc, False)
         st.session_state.puzzles_solved_today = st.session_state.get("puzzles_solved_today", 0) + 1
         st.session_state.puzzle_explanation_pending = True
         st.session_state.puzzle_explanation_correct = False
@@ -4552,6 +5227,19 @@ def render_puzzles_tab():
             f'vs {puzzle["opponent"]} \u00b7 {puzzle["date"]}</div>',
             unsafe_allow_html=True,
         )
+        # Concept tags
+        _puz_concepts = puzzle.get("concepts", [])
+        if _puz_concepts:
+            _ct_pills = "".join(
+                f'<span style="background:#1e2e4a;border:1px solid #2a4a6a;'
+                f'border-radius:4px;padding:1px 7px;font-size:0.68em;'
+                f'color:#7ab8e0;margin:2px;display:inline-block;">{c}</span>'
+                for c in _puz_concepts
+            )
+            st.markdown(
+                f'<div style="margin-bottom:8px;">{_ct_pills}</div>',
+                unsafe_allow_html=True,
+            )
 
         # R2. "Find the best move" prompt
         st.markdown(
@@ -4640,6 +5328,9 @@ def render_puzzles_tab():
                                 puzzle["player_color"],
                                 puzzle["classification"],
                                 was_correct,
+                                eval_before=puzzle.get("eval_before"),
+                                eval_after=puzzle.get("eval_after"),
+                                played_move_san=puzzle.get("move_san") if not was_correct else None,
                             )
                         except Exception:
                             puzzle["explanation"] = f"The best move was {puzzle['best_move_san']}."
@@ -6829,22 +7520,67 @@ def _build_coach_context() -> str:
         critical = []
         for s in summaries:
             for cm in s.get("critical_moves", []):
-                if cm.get("classification") == "blunder" and cm.get("best_move_san"):
+                if cm.get("classification") in ("blunder", "mistake") and cm.get("best_move_san"):
                     critical.append(cm)
         if critical:
             critical.sort(key=lambda c: abs(c.get("eval_before", 0) - c.get("eval_after", 0)), reverse=True)
-            lines.append("\nRecurring mistake patterns from recent games (reference these when relevant):")
-            for cm in critical[:3]:
+            lines.append("\nWorst mistakes from recent games (reference these when relevant):")
+            for cm in critical[:4]:
                 mv_num = cm.get("move_number", "?")
                 played = cm.get("move_san", "?")
                 best   = cm.get("best_move_san", "?")
                 phase  = cm.get("phase", "?")
                 ev_b   = cm.get("eval_before", 0)
                 ev_a   = cm.get("eval_after", 0)
-                lines.append(
-                    f"  - Move {mv_num} ({phase}): played {played} (eval {ev_b:+.1f} → {ev_a:+.1f}), "
-                    f"best was {best}"
+                fen    = cm.get("fen_before", "")
+                entry = (
+                    f"  - Move {mv_num} ({phase}, {cm.get('classification', '?')}): "
+                    f"played {played} (eval {ev_b:+.1f} → {ev_a:+.1f}), best was {best}"
                 )
+                if fen:
+                    entry += f"\n    FEN: {fen}"
+                lines.append(entry)
+
+        # Pattern grouping: identify recurring tactical/structural vulnerabilities
+        _coach_patterns: dict[str, int] = {}
+        for cm in critical:
+            _fen = cm.get("fen_before", "")
+            _best = cm.get("best_move_san", "")
+            _color = cm.get("color", "white")
+            if not _fen or not _best:
+                continue
+            for _pc_name in ["Fork", "Pin", "Back Rank Weakness", "Trapped Piece",
+                             "Isolated Pawn", "Passed Pawn", "Rook On Open File"]:
+                try:
+                    if _position_has_concept(_fen, _pc_name, _best, _color):
+                        _coach_patterns[_pc_name] = _coach_patterns.get(_pc_name, 0) + 1
+                except Exception:
+                    pass
+        _pattern_list = [(n, c) for n, c in _coach_patterns.items() if c >= 2]
+        _pattern_list.sort(key=lambda x: x[1], reverse=True)
+        if _pattern_list:
+            lines.append("\nRecurring tactical/structural patterns in mistakes:")
+            for _pn, _pc in _pattern_list[:4]:
+                lines.append(f"  - {_pn}: appears in {_pc} mistakes")
+
+        # Time pressure insight
+        _tt_total = sum(s.get("time_trouble_moves", 0) for s in summaries)
+        _clock_games = sum(1 for s in summaries if s.get("has_clock"))
+        if _tt_total > 0 and _clock_games > 0:
+            lines.append(f"\nTime pressure: {_tt_total} moves played in time trouble across {_clock_games} games with clock data")
+
+        # Phase clustering
+        _phase_counts = {}
+        for cm in critical:
+            _ph = cm.get("phase", "unknown")
+            _phase_counts[_ph] = _phase_counts.get(_ph, 0) + 1
+        if _phase_counts:
+            _worst_ph = max(_phase_counts, key=_phase_counts.get)
+            lines.append(
+                f"\nMistake distribution by phase: "
+                + ", ".join(f"{ph}: {cnt}" for ph, cnt in sorted(_phase_counts.items(), key=lambda x: -x[1]))
+                + f" (worst phase: {_worst_ph})"
+            )
 
     return "\n".join(lines)
 
@@ -7310,13 +8046,405 @@ def render_notation_tab():
     components.html(html, height=_notation_iframe_height(), scrolling=False)
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Feature: Onboarding Tour
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _render_onboarding_tour():
+    """Show a first-time user walkthrough overlay explaining each section."""
+    if st.session_state.get("_onboarding_dismissed"):
+        return
+    step = st.session_state.get("_onboarding_step", 0)
+    _TOUR_STEPS = [
+        {
+            "title": "Welcome to BoardSense!",
+            "body": "Let's take a quick tour of what you can do here. This will only take a moment.",
+            "icon": "&#9812;",
+        },
+        {
+            "title": "Dashboard",
+            "body": "Your command center. See your stats, daily goals, achievements, and quick actions — all in one place.",
+            "icon": "&#128202;",
+        },
+        {
+            "title": "Profile",
+            "body": "Build your player profile by connecting your Chess.com or Lichess account. We'll analyze your games with Stockfish and Claude AI.",
+            "icon": "&#128100;",
+        },
+        {
+            "title": "Learn",
+            "body": "My Path gives you a personalized learning sequence. Coaching has concept lessons, Training has structured courses, and Ask Coach lets you chat with an AI coach.",
+            "icon": "&#128218;",
+        },
+        {
+            "title": "Puzzles",
+            "body": "Practice tactics from positions in YOUR actual games. Puzzles adapt to your weaknesses and track your improvement.",
+            "icon": "&#9823;",
+        },
+        {
+            "title": "Game Review",
+            "body": "Upload any PGN or fetch from Chess.com/Lichess. Get move-by-move Stockfish analysis with Claude AI commentary on every critical moment.",
+            "icon": "&#128269;",
+        },
+    ]
+    if step >= len(_TOUR_STEPS):
+        st.session_state._onboarding_dismissed = True
+        return
+
+    s = _TOUR_STEPS[step]
+    is_last = step == len(_TOUR_STEPS) - 1
+    next_label = "Get Started!" if is_last else "Next &rarr;"
+
+    st.markdown(
+        f'<div style="background:linear-gradient(135deg,#0d1f30 0%,#152a40 100%);'
+        f'border:2px solid #3a6ea5;border-radius:14px;padding:24px 28px;margin-bottom:16px;'
+        f'box-shadow:0 4px 20px rgba(58,110,165,0.2);">'
+        f'<div style="display:flex;align-items:center;gap:14px;margin-bottom:10px;">'
+        f'<span style="font-size:1.8em;">{s["icon"]}</span>'
+        f'<div>'
+        f'<div style="font-size:1.1em;font-weight:700;color:#e2c97e;">{s["title"]}</div>'
+        f'<div style="font-size:0.72em;color:#5a8ab0;">Step {step + 1} of {len(_TOUR_STEPS)}</div>'
+        f'</div></div>'
+        f'<div style="font-size:0.9em;color:#b0c8d8;line-height:1.6;margin-bottom:14px;">'
+        f'{s["body"]}</div>'
+        f'<div style="display:flex;gap:8px;align-items:center;">'
+        f'<div style="flex:1;height:4px;background:#1e2e3e;border-radius:2px;">'
+        f'<div style="width:{round(100*(step+1)/len(_TOUR_STEPS))}%;height:100%;'
+        f'background:#5a7ac8;border-radius:2px;transition:width 0.3s;"></div></div>'
+        f'</div></div>',
+        unsafe_allow_html=True,
+    )
+    _tour_c1, _tour_c2 = st.columns([1, 1])
+    with _tour_c1:
+        if st.button("Skip Tour", key="tour_skip"):
+            st.session_state._onboarding_dismissed = True
+            st.rerun()
+    with _tour_c2:
+        if st.button("Next" if not is_last else "Get Started!", key="tour_next", type="primary"):
+            if is_last:
+                st.session_state._onboarding_dismissed = True
+            else:
+                st.session_state._onboarding_step = step + 1
+            st.rerun()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Feature: Export / Share Profile
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _generate_profile_report() -> str:
+    """Generate a plain-text profile report for export."""
+    profile = st.session_state.get("profile_data", {})
+    summaries = st.session_state.get("profile_summaries", [])
+    username = st.session_state.get("profile_username_built", "")
+    skills = compute_skill_scores(summaries)
+
+    record = profile.get("record", {})
+    w, l, d = record.get("wins", 0), record.get("losses", 0), record.get("draws", 0)
+    total = w + l + d
+
+    lines = [
+        "=" * 50,
+        "BOARDSENSE PLAYER REPORT",
+        "=" * 50,
+        f"Player: {username}",
+        f"Games Analyzed: {total}",
+        f"Record: {w}W - {l}L - {d}D ({round(100*w/total,1) if total else 0}% win rate)",
+        f"Blunders/Game: {profile.get('blunders_per_game', 0)}",
+        f"Mistakes/Game: {profile.get('mistakes_per_game', 0)}",
+        "",
+        "SKILL SCORES (0-100)",
+        "-" * 30,
+    ]
+    for cat, score in skills.items():
+        bar = "#" * (score // 5) + "." * (20 - score // 5)
+        lines.append(f"  {cat:15s} [{bar}] {score}")
+
+    focus = profile.get("priority_focus", [])
+    if focus:
+        lines += ["", "PRIORITY FOCUS AREAS", "-" * 30]
+        for f_item in focus:
+            lines.append(f"  - {f_item}")
+
+    summary = profile.get("summary", "")
+    if summary:
+        lines += ["", "COACH'S SUMMARY", "-" * 30, summary]
+
+    coach_msg = profile.get("coach_message", "")
+    if coach_msg:
+        lines += ["", "KEY MESSAGE", "-" * 30, coach_msg]
+
+    # Opening stats
+    if summaries:
+        opening_counts: dict[str, dict] = {}
+        for s in summaries:
+            op = s.get("opening", "Unknown")[:40] or "Unknown"
+            od = opening_counts.setdefault(op, {"n": 0, "wins": 0})
+            od["n"] += 1
+            result, color = s.get("result", "*"), s.get("player_color", "white")
+            if (result == "1-0" and color == "white") or (result == "0-1" and color == "black"):
+                od["wins"] += 1
+        sorted_ops = sorted(opening_counts.items(), key=lambda x: -x[1]["n"])[:8]
+        if sorted_ops:
+            lines += ["", "TOP OPENINGS", "-" * 30]
+            for op, od in sorted_ops:
+                wr = round(100 * od["wins"] / od["n"]) if od["n"] else 0
+                lines.append(f"  {op}: {od['n']} games, {wr}% win rate")
+
+    # Achievements
+    unlocked = db.get_achievements()
+    if unlocked:
+        lines += ["", "ACHIEVEMENTS UNLOCKED", "-" * 30]
+        for key in unlocked:
+            ach = _ACHIEVEMENTS.get(key)
+            if ach:
+                lines.append(f"  {ach['icon']} {ach['name']} — {ach['desc']}")
+
+    lines += ["", "=" * 50, "Generated by BoardSense Chess Coaching", "=" * 50]
+    return "\n".join(lines)
+
+
+def _render_export_section():
+    """Render export/share buttons on the profile page."""
+    st.markdown(
+        '<div style="font-size:0.72em;color:#5a7ac8;font-weight:700;letter-spacing:0.06em;'
+        'text-transform:uppercase;margin:16px 0 8px;">EXPORT & SHARE</div>',
+        unsafe_allow_html=True,
+    )
+    _exp1, _exp2 = st.columns(2)
+    with _exp1:
+        report = _generate_profile_report()
+        st.download_button(
+            "Download Report (.txt)",
+            data=report,
+            file_name=f"boardsense_report_{st.session_state.get('profile_username_built', 'player')}.txt",
+            mime="text/plain",
+            use_container_width=True,
+        )
+    with _exp2:
+        # Shareable summary card (copy-paste text)
+        profile = st.session_state.get("profile_data", {})
+        skills = compute_skill_scores(st.session_state.get("profile_summaries", []))
+        username = st.session_state.get("profile_username_built", "")
+        record = profile.get("record", {})
+        w, l, d = record.get("wins", 0), record.get("losses", 0), record.get("draws", 0)
+        best_skill = max(skills, key=skills.get) if skills else "N/A"
+        share_text = (
+            f"BoardSense Profile: {username}\n"
+            f"Record: {w}W-{l}L-{d}D | Best Skill: {best_skill} ({skills.get(best_skill, 0)})\n"
+            f"Focus: {', '.join(profile.get('priority_focus', [])[:3])}"
+        )
+        st.download_button(
+            "Download Share Card (.txt)",
+            data=share_text,
+            file_name=f"boardsense_share_{username}.txt",
+            mime="text/plain",
+            use_container_width=True,
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Feature: Session Analytics
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _render_session_analytics():
+    """Render session activity stats on the dashboard."""
+    import time as _sa_time
+    elapsed = int(_sa_time.time() - st.session_state.get("_session_start", _sa_time.time()))
+    mins = elapsed // 60
+
+    st.markdown(
+        '<div style="font-size:0.7em;color:#4a6080;font-weight:700;letter-spacing:0.1em;'
+        'text-transform:uppercase;margin:16px 0 8px;">THIS SESSION</div>',
+        unsafe_allow_html=True,
+    )
+    _sa1, _sa2, _sa3, _sa4 = st.columns(4)
+    _sa_card = (
+        '<div style="background:#0f1923;border:1px solid #1e2e3e;border-radius:8px;'
+        'padding:10px 8px;text-align:center;">'
+        '<div style="font-size:1.2em;font-weight:700;color:{color};">{value}</div>'
+        '<div style="font-size:0.65em;color:#7a9ab0;font-weight:600;margin-top:2px;">{label}</div></div>'
+    )
+    with _sa1:
+        _t_display = f"{mins}m" if mins < 60 else f"{mins//60}h {mins%60}m"
+        st.markdown(_sa_card.format(value=_t_display, label="TIME", color="#4fc3f7"), unsafe_allow_html=True)
+    with _sa2:
+        st.markdown(_sa_card.format(
+            value=st.session_state.get("_session_puzzles", 0),
+            label="PUZZLES", color="#81c784",
+        ), unsafe_allow_html=True)
+    with _sa3:
+        st.markdown(_sa_card.format(
+            value=st.session_state.get("_session_lessons", 0),
+            label="LESSONS", color="#b39ddb",
+        ), unsafe_allow_html=True)
+    with _sa4:
+        st.markdown(_sa_card.format(
+            value=st.session_state.get("_session_reviews", 0),
+            label="REVIEWS", color="#ffb74d",
+        ), unsafe_allow_html=True)
+
+    # Weekly activity chart (from DB)
+    stats = db.get_session_stats(days=7)
+    if stats:
+        from datetime import date, timedelta
+        today = date.today()
+        day_labels = []
+        day_values = []
+        stats_map = {s["session_date"]: s for s in stats}
+        for i in range(6, -1, -1):
+            d = (today - timedelta(days=i)).isoformat()
+            day_labels.append(d[-5:])  # MM-DD
+            s = stats_map.get(d)
+            day_values.append(round(s["total_secs"] / 60) if s else 0)
+
+        if any(day_values):
+            fig = go.Figure(go.Bar(
+                x=day_labels, y=day_values,
+                marker_color="#3a6ea5",
+                hovertemplate="%{x}: %{y} min<extra></extra>",
+            ))
+            fig.update_layout(
+                height=120,
+                margin=dict(l=0, r=0, t=5, b=20),
+                paper_bgcolor="#0d1117", plot_bgcolor="#0d1117",
+                xaxis=dict(color="#7a9ab0", tickfont=dict(size=9)),
+                yaxis=dict(visible=False),
+                bargap=0.3,
+            )
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Feature: Social Comparison
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _render_compare_profiles():
+    """Compare two player profiles side by side."""
+    st.markdown(
+        '<div style="font-size:0.72em;color:#5a7ac8;font-weight:700;letter-spacing:0.06em;'
+        'text-transform:uppercase;margin:16px 0 8px;">COMPARE WITH A FRIEND</div>',
+        unsafe_allow_html=True,
+    )
+    _cmp_col1, _cmp_col2 = st.columns(2)
+    with _cmp_col1:
+        _cmp_plat = st.radio("Platform", ["Chess.com", "Lichess"],
+                             horizontal=True, key="cmp_platform")
+    with _cmp_col2:
+        _cmp_user = st.text_input("Friend's username", key="cmp_username",
+                                   placeholder="Enter username")
+
+    if not _cmp_user.strip():
+        st.markdown(
+            '<div style="font-size:0.82em;color:#5a7a8a;text-align:center;padding:12px 0;">'
+            'Enter a username to compare skill profiles</div>',
+            unsafe_allow_html=True,
+        )
+        return
+
+    _cmp_user = _cmp_user.strip().lower()
+    _cmp_saved = db.load_profile(_cmp_user)
+
+    if not _cmp_saved:
+        st.markdown(
+            f'<div style="font-size:0.85em;color:#ffb74d;text-align:center;padding:12px 0;">'
+            f'No BoardSense profile found for <b>{_cmp_user}</b>. '
+            f'They need to build their profile on BoardSense first.</div>',
+            unsafe_allow_html=True,
+        )
+        return
+
+    _cmp_prof, _cmp_summ, _ = _cmp_saved
+    _my_prof = st.session_state.get("profile_data", {})
+    _my_summ = st.session_state.get("profile_summaries", [])
+    _my_user = st.session_state.get("profile_username_built", "you")
+
+    _my_skills = compute_skill_scores(_my_summ)
+    _cmp_skills = compute_skill_scores(_cmp_summ)
+
+    # Side-by-side radar
+    import plotly.graph_objects as _cmp_go
+    cats = _SKILL_CATS
+    _my_vals = [_my_skills.get(c, 50) for c in cats]
+    _cmp_vals = [_cmp_skills.get(c, 50) for c in cats]
+
+    fig = _cmp_go.Figure()
+    fig.add_trace(_cmp_go.Scatterpolar(
+        r=_my_vals + [_my_vals[0]], theta=cats + [cats[0]],
+        fill="toself", fillcolor="rgba(74,106,170,0.15)",
+        line=dict(color="#4a6aaa", width=2),
+        name=_my_user,
+    ))
+    fig.add_trace(_cmp_go.Scatterpolar(
+        r=_cmp_vals + [_cmp_vals[0]], theta=cats + [cats[0]],
+        fill="toself", fillcolor="rgba(129,199,132,0.15)",
+        line=dict(color="#81c784", width=2),
+        name=_cmp_user,
+    ))
+    fig.update_layout(
+        polar=dict(
+            radialaxis=dict(visible=True, range=[0, 100], gridcolor="#1e2e3e",
+                           tickfont=dict(color="#7a9ab0", size=9)),
+            angularaxis=dict(gridcolor="#1e2e3e", tickfont=dict(color="#cce0f4", size=11)),
+            bgcolor="#0d1117",
+        ),
+        paper_bgcolor="#0d1117", height=280,
+        margin=dict(l=50, r=50, t=25, b=25),
+        legend=dict(bgcolor="#0d1117", bordercolor="#1e2e3e",
+                   font=dict(color="#cce0f4", size=11)),
+    )
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+    # Stat comparison table
+    _my_rec = _my_prof.get("record", {})
+    _cmp_rec = _cmp_prof.get("record", {})
+    _my_total = sum(_my_rec.get(k, 0) for k in ("wins", "losses", "draws"))
+    _cmp_total = sum(_cmp_rec.get(k, 0) for k in ("wins", "losses", "draws"))
+    _my_wr = round(100 * _my_rec.get("wins", 0) / _my_total, 1) if _my_total else 0
+    _cmp_wr = round(100 * _cmp_rec.get("wins", 0) / _cmp_total, 1) if _cmp_total else 0
+
+    _comp_rows = [
+        ("Win Rate", f"{_my_wr}%", f"{_cmp_wr}%"),
+        ("Blunders/Game", str(_my_prof.get("blunders_per_game", 0)),
+         str(_cmp_prof.get("blunders_per_game", 0))),
+        ("Mistakes/Game", str(_my_prof.get("mistakes_per_game", 0)),
+         str(_cmp_prof.get("mistakes_per_game", 0))),
+        ("Games Analyzed", str(_my_total), str(_cmp_total)),
+    ]
+    for cat in cats:
+        _comp_rows.append((cat, str(_my_skills.get(cat, 50)), str(_cmp_skills.get(cat, 50))))
+
+    _tbl_html = (
+        '<table style="width:100%;border-collapse:collapse;font-size:0.82em;">'
+        f'<tr style="border-bottom:1px solid #1e2e3e;">'
+        f'<th style="text-align:left;padding:6px;color:#7a9ab0;"></th>'
+        f'<th style="text-align:center;padding:6px;color:#4a6aaa;font-weight:700;">{_my_user}</th>'
+        f'<th style="text-align:center;padding:6px;color:#81c784;font-weight:700;">{_cmp_user}</th></tr>'
+    )
+    for label, v1, v2 in _comp_rows:
+        _tbl_html += (
+            f'<tr style="border-bottom:1px solid #0d1525;">'
+            f'<td style="padding:5px 6px;color:#8aaac8;">{label}</td>'
+            f'<td style="text-align:center;padding:5px;color:#cce0f4;font-weight:600;">{v1}</td>'
+            f'<td style="text-align:center;padding:5px;color:#cce0f4;font-weight:600;">{v2}</td></tr>'
+        )
+    _tbl_html += '</table>'
+    st.markdown(_tbl_html, unsafe_allow_html=True)
+
+
 def render_dashboard_tab():
     """Landing dashboard — stats overview, quick actions, and recommendations."""
     profile = st.session_state.get("profile_data")
     summaries = st.session_state.get("profile_summaries", [])
     username = st.session_state.get("profile_username_built", "")
 
+    # Check streak achievements on each dashboard render
+    _check_streak_achievements()
+
     if not profile:
+        # Onboarding tour for first-time users
+        _render_onboarding_tour()
+
         # No profile yet — guided onboarding
         st.markdown(
             '<div style="text-align:center;padding:28px 0 8px;">'
@@ -7339,8 +8467,9 @@ def render_dashboard_tab():
                 horizontal=True, key="onboard_platform",
             )
             _ob_label = "Chess.com username" if _ob_plat == "Chess.com" else "Lichess username"
+            _ob_placeholder = "e.g., magnuscarlsen" if _ob_plat == "Chess.com" else "e.g., DrNykterstein"
             _ob_user = st.text_input(_ob_label, value="", key="onboard_username",
-                                     placeholder="Enter username")
+                                     placeholder=_ob_placeholder)
             _ob_est = _estimate_analysis_time(2, 12)
             st.caption(f"~2 months of games at standard depth ({_ob_est})")
             if st.button(
@@ -7446,16 +8575,81 @@ def render_dashboard_tab():
     _old_l = _losses - _new_l
     _old_d = _draws - _new_d
 
-    # ── Welcome header (slim, left-aligned) ───────────────────────────────
+    # ── Welcome header (slim, left-aligned) with streak ───────────────────
+    _streak = st.session_state.get("_login_streak", {})
+    _streak_cur = _streak.get("current", 0)
+    _streak_html = ""
+    if _streak_cur > 0:
+        _streak_color = "#e2c97e" if _streak_cur >= 7 else "#81c784" if _streak_cur >= 3 else "#5a8ab0"
+        _streak_html = (
+            f'<span style="font-size:0.78em;color:{_streak_color};font-weight:600;'
+            f'margin-left:10px;">'
+            f'\U0001f525 {_streak_cur} day streak</span>'
+        )
     st.markdown(
         f'<div style="display:flex;align-items:baseline;justify-content:space-between;'
         f'margin:14px 0 12px;padding:0 2px;">'
         f'<span style="font-size:1.1em;font-weight:700;color:#cce0f4;">Welcome back, '
-        f'<span style="color:#e2c97e;">{username}</span></span>'
+        f'<span style="color:#e2c97e;">{username}</span>{_streak_html}</span>'
         f'<span style="font-size:0.82em;color:#7a9ab0;">{_total_games} games analysed</span>'
         f'</div>',
         unsafe_allow_html=True,
     )
+
+    # ── Recommended Next Step ─────────────────────────────────────────────
+    _next_action = None
+    _next_nav = None
+    _next_nav_concept = None
+
+    # Check review-due concepts first (time-sensitive)
+    _rd = db.get_review_due_concepts(days=3, threshold=0.8)
+    if _rd:
+        _next_action = f"Review: {_rd[0]['concept']} — scored {_rd[0]['score']}/{_rd[0]['total']} last time"
+        _next_nav = "navigate_to_coaching"
+        _next_nav_concept = _rd[0]["concept"]
+    else:
+        # Check concept mastery — find weakest practiced concept
+        _cm_all = st.session_state.get("_concept_mastery_cache")
+        if _cm_all is None:
+            _cm_all = db.get_all_concept_mastery()
+            st.session_state["_concept_mastery_cache"] = _cm_all
+        _weak_concepts = [
+            (name, data) for name, data in _cm_all.items()
+            if data["attempted"] >= 3 and data["pct"] < 60
+        ]
+        _weak_concepts.sort(key=lambda x: x[1]["pct"])
+        if _weak_concepts:
+            _wc_name, _wc_data = _weak_concepts[0]
+            _next_action = f"Practice: {_wc_name} — {_wc_data['correct']}/{_wc_data['attempted']} puzzles correct"
+            _next_nav = "navigate_to_coaching"
+            _next_nav_concept = _wc_name
+        elif profile.get("priority_focus"):
+            _pf = profile["priority_focus"][0]
+            _next_action = f"Study: {_pf} — coach's top priority for your improvement"
+            _next_nav = "navigate_to_coaching"
+            _next_nav_concept = _pf
+        else:
+            # Find weakest skill
+            if _dash_skills:
+                _worst_skill = min(_dash_skills, key=_dash_skills.get)
+                _next_action = f"Work on: {_worst_skill} (score: {_dash_skills[_worst_skill]})"
+                _next_nav = "navigate_to_training"
+
+    if _next_action:
+        st.markdown(
+            f'<div style="background:#0d1525;border:1px solid #2a4a6a;border-left:3px solid #5a7ac8;'
+            f'border-radius:8px;padding:12px 16px;margin-bottom:12px;">'
+            f'<div style="font-size:0.68em;color:#5a7ac8;font-weight:700;'
+            f'letter-spacing:0.06em;margin-bottom:4px;">RECOMMENDED NEXT STEP</div>'
+            f'<div style="font-size:0.92em;color:#cce0f4;font-weight:600;">{_next_action}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        if _next_nav and st.button("Go →", key="dash_next_step"):
+            if _next_nav_concept:
+                st.session_state.selected_concept = _next_nav_concept
+            st.session_state[_next_nav] = True
+            st.rerun()
 
     # ── Daily Goals ──────────────────────────────────────────────────────────
     _dg_targets, _dg_progress = _get_daily_goals()
@@ -7493,6 +8687,9 @@ def render_dashboard_tab():
                 unsafe_allow_html=True,
             )
 
+    # ── Session Analytics ──────────────────────────────────────────────────
+    _render_session_analytics()
+
     # ── Achievements ──────────────────────────────────────────────────────────
     _unlocked = db.get_achievements()
     st.markdown(
@@ -7501,8 +8698,9 @@ def render_dashboard_tab():
         unsafe_allow_html=True,
     )
     _ach_count = len(_ACHIEVEMENTS)
+    # Use responsive grid — auto-fill to handle the growing achievements list
     _ach_html = (
-        f'<div style="display:grid;grid-template-columns:repeat({_ach_count}, 1fr);gap:8px;">'
+        f'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:8px;">'
     )
     for _ach_key, _ach_def in _ACHIEVEMENTS.items():
         if _ach_key in _unlocked:
@@ -7856,6 +9054,76 @@ def render_dashboard_tab():
 
     st.markdown('<div style="height:6px;"></div>', unsafe_allow_html=True)
 
+    # ── Recurring Vulnerabilities (pattern recognition across games) ──────
+    if summaries:
+        _vuln_cache_key = f"_vulnerabilities_{len(summaries)}"
+        if _vuln_cache_key not in st.session_state:
+            _vuln_counts: dict[str, list[dict]] = {}
+            for _vs in summaries:
+                for _vcm in _vs.get("critical_moves", []):
+                    if not _vcm.get("fen_before") or not _vcm.get("best_move_san"):
+                        continue
+                    for _vc_cat, _vc_names in CONCEPT_LIBRARY.items():
+                        for _vc_name in _vc_names:
+                            if _vc_name in _THEORY_ONLY_CONCEPTS:
+                                continue
+                            try:
+                                if _position_has_concept(
+                                    _vcm["fen_before"], _vc_name,
+                                    _vcm["best_move_san"], _vcm.get("color", "white"),
+                                ):
+                                    _vuln_counts.setdefault(_vc_name, []).append({
+                                        "phase": _vcm.get("phase", "?"),
+                                        "swing": abs(_vcm.get("eval_before", 0) - _vcm.get("eval_after", 0)),
+                                    })
+                            except Exception:
+                                pass
+            # Only show concepts that appear 3+ times
+            _vulns = []
+            for _vn, _vms in _vuln_counts.items():
+                if len(_vms) >= 3:
+                    _v_phases = {}
+                    for _vm in _vms:
+                        _v_phases[_vm["phase"]] = _v_phases.get(_vm["phase"], 0) + 1
+                    _top_phase = max(_v_phases, key=_v_phases.get)
+                    _avg_swing = sum(m["swing"] for m in _vms) / len(_vms)
+                    _vulns.append({
+                        "concept": _vn, "count": len(_vms),
+                        "top_phase": _top_phase, "avg_swing": _avg_swing,
+                    })
+            _vulns.sort(key=lambda v: v["count"] * v["avg_swing"], reverse=True)
+            st.session_state[_vuln_cache_key] = _vulns[:5]
+
+        _vulns_display = st.session_state.get(_vuln_cache_key, [])
+        if _vulns_display:
+            st.markdown(
+                '<div style="border-top:1px solid #1e2e3e;padding-top:12px;margin-top:4px;">'
+                '<span style="font-size:0.7em;color:#e57373;font-weight:700;letter-spacing:0.1em;'
+                'text-transform:uppercase;">RECURRING VULNERABILITIES</span></div>',
+                unsafe_allow_html=True,
+            )
+            for _vd in _vulns_display:
+                _vd_sev = "#e57373" if _vd["avg_swing"] >= 2 else "#ffb74d" if _vd["avg_swing"] >= 1 else "#fff176"
+                st.markdown(
+                    f'<div style="background:#1a0f0f;border:1px solid #2e1a1a;border-radius:8px;'
+                    f'padding:10px 14px;margin-bottom:6px;display:flex;'
+                    f'justify-content:space-between;align-items:center;">'
+                    f'<div>'
+                    f'<span style="font-size:0.92em;font-weight:700;color:#e8c0c0;">{_vd["concept"]}</span>'
+                    f'<span style="font-size:0.75em;color:#8a6a6a;margin-left:10px;">'
+                    f'{_vd["count"]}x · mostly {_vd["top_phase"]}</span></div>'
+                    f'<span style="font-size:0.78em;color:{_vd_sev};font-weight:600;">'
+                    f'avg {_vd["avg_swing"]:.1f} pawns</span>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+            # Study button for top vulnerability
+            if st.button(f"Study: {_vulns_display[0]['concept']} →", key="dash_vuln_study"):
+                st.session_state.selected_concept = _vulns_display[0]["concept"]
+                st.session_state.navigate_to_coaching = True
+                st.rerun()
+            st.markdown('<div style="height:6px;"></div>', unsafe_allow_html=True)
+
     # ── Group header: QUICK ACTIONS ───────────────────────────────────────
     st.markdown(
         '<div style="border-top:1px solid #1e2e3e;padding-top:12px;margin-top:4px;">'
@@ -7881,11 +9149,11 @@ def render_dashboard_tab():
             st.rerun()
     with qa2:
         st.markdown(_qa_card.format(
-            icon="♔", title="Training",
-            desc="Continue your personalised curriculum",
+            icon="♔", title="My Path",
+            desc="Your personalised learning sequence",
         ), unsafe_allow_html=True)
-        if st.button("Open Training", key="dash_training", use_container_width=True):
-            st.session_state.navigate_to_training = True
+        if st.button("Open My Path", key="dash_training", use_container_width=True):
+            st.session_state.navigate_to_my_path = True
             st.rerun()
     with qa3:
         st.markdown(_qa_card.format(
@@ -7964,7 +9232,7 @@ def render_profile_tab():
     profile_platform = st.session_state.get("profile_platform", "Chess.com")
     username = st.session_state.get("profile_username", "").strip().lower()
 
-    with st.expander("Advanced settings"):
+    with st.expander("Advanced settings", expanded=False):
         _adv1, _adv2 = st.columns(2)
         with _adv1:
             n_months = st.number_input("Months of games", min_value=1, max_value=6, value=2,
@@ -7981,7 +9249,7 @@ def render_profile_tab():
 
     _est = _estimate_analysis_time(int(n_months), int(depth_choice))
     build_btn = st.button(
-        f"▶ Build Profile ({_est})",
+        f"⚡ Analyze Games ({_est})",
         type="primary",
         use_container_width=True,
     )
@@ -8101,12 +9369,35 @@ def render_profile_tab():
                         games = lichess.fetch_recent_games(username, int(n_months), bypass_cache=True)
                     else:
                         games = chesscom.fetch_recent_games(username, int(n_months), bypass_cache=True)
+                except RuntimeError as e:
+                    st.error(f"{e}")
+                    return
                 except Exception as e:
-                    st.error(f"Failed to fetch from {profile_platform}: {e}")
+                    err_str = str(e)
+                    if "rate limit" in err_str.lower() or "429" in err_str or "403" in err_str:
+                        st.error(
+                            f"**{profile_platform} rate limit reached.** Please wait a few minutes and try again. "
+                            f"This is a temporary restriction from {profile_platform}'s servers."
+                        )
+                    elif "timeout" in err_str.lower() or "timed out" in err_str.lower():
+                        st.error(
+                            f"**Connection timed out** while reaching {profile_platform}. "
+                            f"Check your internet connection and try again."
+                        )
+                    elif "not found" in err_str.lower() or "404" in err_str:
+                        st.error(
+                            f"**Username not found** on {profile_platform}. "
+                            f"Please check the spelling and make sure the account is public."
+                        )
+                    else:
+                        st.error(f"Failed to fetch from {profile_platform}: {e}")
                     return
 
             if not games:
-                st.warning(f"No games found for {username} in the last {n_months} month(s).")
+                st.warning(
+                    f"No games found for **{username}** in the last {n_months} month(s). "
+                    f"Make sure the username is correct and the account has recent games on {profile_platform}."
+                )
                 return
 
             if len(games) > _MAX_BUILD_GAMES:
@@ -8580,6 +9871,14 @@ def render_profile_tab():
                 if st.button("Deep Dive →", key=f"deep_dive_{j}", use_container_width=True):
                     _deep_dive_to_review(s["_pgn"], s["white"], s["black"])
 
+    # ── Export & Share ──────────────────────────────────────────────────────
+    st.markdown("---")
+    _render_export_section()
+
+    # ── Social Comparison ──────────────────────────────────────────────────
+    st.markdown("---")
+    _render_compare_profiles()
+
 
 # ── Tab: Openings ────────────────────────────────────────────────────────────
 
@@ -8792,24 +10091,18 @@ def render_openings_tab():
             if st.button("Next Position ▶", disabled=drill_idx >= len(positions) - 1,
                          key="drill_next", use_container_width=True):
                 st.session_state.drill_idx = drill_idx + 1
+                # Track drill completions for achievement
+                _drilled = st.session_state.setdefault("_drills_completed", set())
+                _drilled.add(selected_drill)
+                if len(_drilled) >= 5:
+                    _check_achievement("opening_driller")
                 st.rerun()
 
 
 # ── Main layout ──────────────────────────────────────────────────────────────
 
-# ── Header bar: branding left, settings + user right ─────────────────────────
-_hdr_left, _hdr_right = st.columns([3, 1])
-
-with _hdr_left:
-    st.markdown(
-        '<div style="padding:14px 0 2px;">'
-        '<span style="font-size:1.25em;font-weight:900;color:#e2c97e;letter-spacing:0.05em;'
-        'text-shadow:0 0 24px rgba(226,201,126,0.2);">♔&ensp;BOARDSENSE</span>'
-        '&ensp;<span style="font-size:0.78em;font-weight:600;color:#5a7a90;letter-spacing:0.08em;'
-        'position:relative;top:-1px;">CHESS COACHING</span>'
-        '</div>',
-        unsafe_allow_html=True,
-    )
+# ── Header bar: settings + user (branding is now in the fixed logo bar) ───────
+_, _hdr_right = st.columns([3, 1])
 
 with _hdr_right:
     _hdr_has_profile = bool(st.session_state.get("profile_summaries"))
@@ -9004,6 +10297,16 @@ with _hdr_right:
 
                 # ── Log out ───────────────────────────────────────────────
                 if st.button("Log out", key="hdr_logout", use_container_width=True):
+                    # Save session stats before clearing
+                    import time as _logout_time
+                    _sess_dur = int(_logout_time.time() - st.session_state.get("_session_start", _logout_time.time()))
+                    if _sess_dur > 10:  # Only save if session was meaningful
+                        db.save_session_stats(
+                            _sess_dur,
+                            st.session_state.get("_session_puzzles", 0),
+                            st.session_state.get("_session_lessons", 0),
+                            st.session_state.get("_session_reviews", 0),
+                        )
                     db.clear_active_user()
                     # Keys to preserve across logout (UI prefs only)
                     _keep = {
@@ -9076,6 +10379,10 @@ if st.session_state.pop("navigate_to_profile", False):
     st.session_state.profile_section = "Player Profile"
     components.html(_js_tab_click("profile"), height=0)
 
+if st.session_state.pop("navigate_to_my_path", False):
+    st.session_state.learn_section = "My Path"
+    components.html(_js_tab_click("learn"), height=0)
+
 if st.session_state.pop("navigate_to_training", False):
     st.session_state.learn_section = "Training"
     components.html(_js_tab_click("learn"), height=0)
@@ -9104,9 +10411,10 @@ with tab_profile:
         )
     with _prof_ctrl_user:
         _prof_plat_label = "Chess.com username" if _prof_platform == "Chess.com" else "Lichess username"
+        _prof_placeholder = "e.g., magnuscarlsen" if _prof_platform == "Chess.com" else "e.g., DrNykterstein"
         _prof_username = st.text_input(_prof_plat_label, value="",
                                        key="profile_username",
-                                       placeholder="Enter username")
+                                       placeholder=_prof_placeholder)
 
     _profile_section = st.radio(
         "Section",
@@ -9180,12 +10488,14 @@ with tab_learn:
         # ── Standard sub-nav radio ───────────────────────────────────────
         _learn_section = st.radio(
             "Section",
-            ["Coaching", "Training", "Ask Coach", "Notation"],
+            ["My Path", "Coaching", "Training", "Ask Coach", "Notation"],
             horizontal=True,
             key="learn_section",
             label_visibility="collapsed",
         )
-        if _learn_section == "Coaching":
+        if _learn_section == "My Path":
+            render_guided_path()
+        elif _learn_section == "Coaching":
             render_coaching_tab()
         elif _learn_section == "Training":
             render_training_tab()
