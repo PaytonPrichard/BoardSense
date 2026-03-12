@@ -5039,6 +5039,496 @@ def render_training_tab():
         _render_ttr_stages()
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Feature: Endgame Trainer (tablebase-powered)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_ENDGAME_POSITIONS = [
+    {
+        "name": "King + Queen vs King",
+        "fen": "4k3/8/8/8/8/8/8/4K2Q w - - 0 1",
+        "difficulty": "Beginner",
+        "desc": "Deliver checkmate with your queen. Use your king to help cut off escape squares.",
+        "icon": "♛",
+    },
+    {
+        "name": "King + Rook vs King",
+        "fen": "4k3/8/8/8/8/8/8/4K2R w - - 0 1",
+        "difficulty": "Beginner",
+        "desc": "The box method — push the enemy king to the edge, then deliver mate with your rook.",
+        "icon": "♜",
+    },
+    {
+        "name": "King + Pawn vs King",
+        "fen": "8/8/8/8/4P3/8/4K3/4k3 w - - 0 1",
+        "difficulty": "Intermediate",
+        "desc": "Can you promote? The key concept is opposition — keeping your king in front of the pawn.",
+        "icon": "♟",
+    },
+    {
+        "name": "Lucena Position",
+        "fen": "1K1k4/1P6/8/8/8/8/r7/5R2 w - - 0 1",
+        "difficulty": "Intermediate",
+        "desc": "The most important rook endgame pattern. Build a bridge to promote your pawn.",
+        "icon": "♜",
+    },
+    {
+        "name": "King + Two Bishops vs King",
+        "fen": "4k3/8/8/8/8/8/8/2B1KB2 w - - 0 1",
+        "difficulty": "Advanced",
+        "desc": "Drive the king to the corner using both bishops. They control different color squares.",
+        "icon": "♝",
+    },
+    {
+        "name": "King + Bishop + Knight vs King",
+        "fen": "7k/8/8/8/8/8/8/4KBN1 w - - 0 1",
+        "difficulty": "Advanced",
+        "desc": "The hardest basic checkmate. You must drive the king to the corner matching your bishop's color.",
+        "icon": "♞",
+    },
+]
+
+_ET_DIFF_COLORS = {"Beginner": "#4caf50", "Intermediate": "#ff9800", "Advanced": "#f44336"}
+
+
+def render_endgame_trainer():
+    """Tablebase-powered endgame practice — play against perfect play."""
+    st.markdown(
+        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">'
+        '<span style="font-size:1.3em;">♔</span>'
+        '<div>'
+        '<div style="font-size:1.1em;font-weight:700;color:#e2c97e;">Endgame Trainer</div>'
+        '<div style="font-size:0.78em;color:#7a9ab0;">Practice endgame technique against the '
+        'Syzygy tablebase — every move is evaluated with perfect play.</div>'
+        '</div></div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── Active session ─────────────────────────────────────────────────────
+    if "_et_fen" in st.session_state:
+        _render_endgame_session()
+        return
+
+    # ── Position selection grid ────────────────────────────────────────────
+    # Standard positions
+    st.markdown(
+        '<div style="font-size:0.72em;color:#5a7ac8;font-weight:700;letter-spacing:0.06em;'
+        'margin:16px 0 8px;">STANDARD ENDGAMES</div>',
+        unsafe_allow_html=True,
+    )
+    cols = st.columns(3)
+    for i, pos in enumerate(_ENDGAME_POSITIONS):
+        with cols[i % 3]:
+            diff_col = _ET_DIFF_COLORS.get(pos["difficulty"], "#aaa")
+            st.markdown(
+                f'<div style="background:#111827;border:1px solid #1e2e3e;border-radius:10px;'
+                f'padding:14px;margin-bottom:8px;min-height:130px;">'
+                f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">'
+                f'<span style="font-size:1.2em;">{pos["icon"]}</span>'
+                f'<span style="font-size:0.9em;font-weight:700;color:#cce0f4;">{pos["name"]}</span>'
+                f'</div>'
+                f'<div style="font-size:0.72em;color:{diff_col};font-weight:700;letter-spacing:0.04em;'
+                f'margin-bottom:4px;">{pos["difficulty"].upper()}</div>'
+                f'<div style="font-size:0.78em;color:#7a9ab0;line-height:1.5;">{pos["desc"]}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            if st.button("Practice", key=f"et_start_{i}", use_container_width=True):
+                st.session_state["_et_fen"] = pos["fen"]
+                st.session_state["_et_start_fen"] = pos["fen"]
+                st.session_state["_et_name"] = pos["name"]
+                st.session_state["_et_history"] = []
+                st.session_state["_et_status"] = "playing"
+                st.session_state["_et_message"] = ""
+                st.rerun()
+
+    # Custom FEN input
+    st.markdown(
+        '<div style="font-size:0.72em;color:#5a7ac8;font-weight:700;letter-spacing:0.06em;'
+        'margin:16px 0 8px;">CUSTOM POSITION</div>',
+        unsafe_allow_html=True,
+    )
+    _et_custom = st.text_input(
+        "Paste any endgame FEN (≤7 pieces):",
+        key="_et_custom_fen",
+        placeholder="e.g., 8/8/8/4k3/8/8/4KP2/8 w - - 0 1",
+    )
+    if st.button("Start Practice", key="et_start_custom", disabled=not _et_custom.strip()):
+        fen = _et_custom.strip()
+        try:
+            board = chess.Board(fen)
+            pieces = sum(1 for c in fen.split()[0] if c.isalpha())
+            if pieces > 7:
+                st.error("Position has more than 7 pieces. Tablebase only covers ≤7.")
+            else:
+                tb = chess_data.get_tablebase(fen)
+                if not tb:
+                    st.error("Could not look up this position in the tablebase.")
+                else:
+                    st.session_state["_et_fen"] = fen
+                    st.session_state["_et_start_fen"] = fen
+                    st.session_state["_et_name"] = "Custom Position"
+                    st.session_state["_et_history"] = []
+                    st.session_state["_et_status"] = "playing"
+                    st.session_state["_et_message"] = ""
+                    st.rerun()
+        except Exception:
+            st.error("Invalid FEN. Please check the format.")
+
+    # From user's games (if profile loaded)
+    summaries = st.session_state.get("profile_summaries", [])
+    if summaries:
+        _eg_positions = []
+        for s in summaries:
+            for cm in s.get("critical_moves", []):
+                fen = cm.get("fen_before", "")
+                if not fen:
+                    continue
+                pieces = sum(1 for c in fen.split()[0] if c.isalpha())
+                if pieces <= 7:
+                    _eg_positions.append({
+                        "fen": fen,
+                        "move_number": cm.get("move_number", "?"),
+                        "classification": cm.get("classification", ""),
+                        "opponent": s.get("black", "?") if s.get("player_color") == "white" else s.get("white", "?"),
+                    })
+        if _eg_positions:
+            st.markdown(
+                '<div style="font-size:0.72em;color:#5a7ac8;font-weight:700;letter-spacing:0.06em;'
+                'margin:16px 0 8px;">FROM YOUR GAMES</div>'
+                '<div style="font-size:0.78em;color:#7a9ab0;margin-bottom:8px;">'
+                'Endgame positions from your actual games — practice converting them.</div>',
+                unsafe_allow_html=True,
+            )
+            _eg_cols = st.columns(min(len(_eg_positions[:6]), 3))
+            for j, ep in enumerate(_eg_positions[:6]):
+                with _eg_cols[j % 3]:
+                    _ep_board = chess.Board(ep["fen"])
+                    _ep_pieces = []
+                    for sq in chess.SQUARES:
+                        p = _ep_board.piece_at(sq)
+                        if p:
+                            _ep_pieces.append(p.symbol())
+                    _ep_desc = "".join(sorted(_ep_pieces, key=lambda c: "KQRBNPkqrbnp".index(c)))
+                    st.markdown(
+                        f'<div style="background:#111827;border:1px solid #1e2e3e;border-radius:8px;'
+                        f'padding:10px;text-align:center;margin-bottom:6px;">'
+                        f'<div style="font-size:0.85em;color:#cce0f4;font-weight:600;">{_ep_desc}</div>'
+                        f'<div style="font-size:0.72em;color:#7a9ab0;">Move {ep["move_number"]} '
+                        f'vs {ep["opponent"]}</div></div>',
+                        unsafe_allow_html=True,
+                    )
+                    if st.button("Practice", key=f"et_game_{j}", use_container_width=True):
+                        st.session_state["_et_fen"] = ep["fen"]
+                        st.session_state["_et_start_fen"] = ep["fen"]
+                        st.session_state["_et_name"] = f"vs {ep['opponent']} (move {ep['move_number']})"
+                        st.session_state["_et_history"] = []
+                        st.session_state["_et_status"] = "playing"
+                        st.session_state["_et_message"] = ""
+                        st.rerun()
+
+
+def _render_endgame_session():
+    """Render an active endgame trainer session."""
+    fen = st.session_state["_et_fen"]
+    name = st.session_state.get("_et_name", "Endgame")
+    history = st.session_state.get("_et_history", [])
+    status = st.session_state.get("_et_status", "playing")
+    message = st.session_state.get("_et_message", "")
+
+    board = chess.Board(fen)
+
+    # Header with back button
+    _et_h1, _et_h2 = st.columns([1, 4])
+    with _et_h1:
+        if st.button("← Back", key="et_back"):
+            for k in list(st.session_state.keys()):
+                if k.startswith("_et_"):
+                    del st.session_state[k]
+            st.rerun()
+    with _et_h2:
+        tb = chess_data.get_tablebase(fen)
+        tb_verdict = ""
+        if tb:
+            cat = tb.get("category", "")
+            dtm = tb.get("dtm")
+            side = "White" if board.turn == chess.WHITE else "Black"
+            if cat == "win":
+                tb_verdict = f'<span style="color:#4caf50;">{side} wins'
+                if dtm is not None:
+                    tb_verdict += f" (mate in {abs(dtm)})"
+                tb_verdict += '</span>'
+            elif cat == "draw":
+                tb_verdict = '<span style="color:#aaa;">Theoretical draw</span>'
+            elif cat == "loss":
+                tb_verdict = f'<span style="color:#e57373;">{side} loses</span>'
+            else:
+                tb_verdict = f'<span style="color:#aaa;">{cat}</span>'
+
+        st.markdown(
+            f'<div style="display:flex;align-items:center;gap:12px;">'
+            f'<span style="font-size:1em;font-weight:700;color:#e2c97e;">{name}</span>'
+            f'<span style="font-size:0.82em;">{tb_verdict}</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    # Board + controls
+    _et_bc, _et_ctrl = st.columns([2, 1])
+    with _et_bc:
+        _et_svg = chess.svg.board(
+            board, size=340, coordinates=True,
+            colors={"square light": "#e8dcc8", "square dark": "#7a945a"},
+        )
+        st.markdown(
+            f'<div style="display:flex;justify-content:center;">{_et_svg}</div>',
+            unsafe_allow_html=True,
+        )
+
+    with _et_ctrl:
+        # Show message from last move
+        if message:
+            st.markdown(message, unsafe_allow_html=True)
+
+        if board.is_game_over():
+            if board.is_checkmate():
+                winner = "Black" if board.turn == chess.WHITE else "White"
+                st.success(f"Checkmate! {winner} wins.")
+            else:
+                st.info("Draw.")
+            st.session_state["_et_status"] = "done"
+
+        if status == "playing" and not board.is_game_over():
+            to_move = "White" if board.turn == chess.WHITE else "Black"
+            st.markdown(
+                f'<div style="font-size:0.88em;color:#cce0f4;font-weight:600;margin-bottom:8px;">'
+                f'{to_move} to move</div>',
+                unsafe_allow_html=True,
+            )
+
+            move_input = st.text_input(
+                "Your move:", key="_et_move_input",
+                placeholder="e.g., Qd7, Ke6, Rf1",
+            )
+            if st.button("Play Move", key="et_play", type="primary", use_container_width=True):
+                if not move_input.strip():
+                    st.warning("Enter a move.")
+                else:
+                    _process_endgame_move(move_input.strip())
+
+            # Show legal moves as hint
+            with st.expander("Show legal moves", expanded=False):
+                legal = sorted([board.san(m) for m in board.legal_moves])
+                st.markdown(
+                    f'<div style="font-size:0.78em;color:#7a9ab0;line-height:1.8;">'
+                    f'{", ".join(legal)}</div>',
+                    unsafe_allow_html=True,
+                )
+
+        # Restart / New position
+        _et_r1, _et_r2 = st.columns(2)
+        with _et_r1:
+            if st.button("Restart", key="et_restart", use_container_width=True):
+                st.session_state["_et_fen"] = st.session_state["_et_start_fen"]
+                st.session_state["_et_history"] = []
+                st.session_state["_et_status"] = "playing"
+                st.session_state["_et_message"] = ""
+                st.rerun()
+        with _et_r2:
+            if st.button("New Position", key="et_new", use_container_width=True):
+                for k in list(st.session_state.keys()):
+                    if k.startswith("_et_"):
+                        del st.session_state[k]
+                st.rerun()
+
+    # Move history
+    if history:
+        st.markdown(
+            '<div style="font-size:0.72em;color:#5a7ac8;font-weight:700;letter-spacing:0.06em;'
+            'margin:12px 0 6px;">MOVE HISTORY</div>',
+            unsafe_allow_html=True,
+        )
+        _hist_parts = []
+        for h in history:
+            _h_col = {"win": "#4caf50", "draw": "#ff9800", "loss": "#e57373"}.get(h.get("verdict", ""), "#aaa")
+            _h_icon = {"win": "✓", "draw": "=", "loss": "✗"}.get(h.get("verdict", ""), "·")
+            _hist_parts.append(
+                f'<span style="display:inline-block;background:#111827;border:1px solid #1e2e3e;'
+                f'border-radius:6px;padding:3px 8px;margin:2px;font-size:0.82em;">'
+                f'<span style="color:{_h_col};font-weight:700;">{_h_icon}</span> '
+                f'<span style="color:#cce0f4;">{h.get("san", "?")}</span>'
+                f'</span>'
+            )
+        st.markdown(
+            f'<div style="line-height:2.2;">{"".join(_hist_parts)}</div>',
+            unsafe_allow_html=True,
+        )
+
+
+def _process_endgame_move(move_text: str):
+    """Process a user's move in the endgame trainer."""
+    fen = st.session_state["_et_fen"]
+    board = chess.Board(fen)
+    history = st.session_state.get("_et_history", [])
+
+    # Parse the move
+    try:
+        move = board.parse_san(move_text)
+        san = board.san(move)
+    except Exception:
+        st.error(f"'{move_text}' is not a legal move in this position.")
+        return
+
+    # Get tablebase BEFORE the move to know what we should achieve
+    tb_before = chess_data.get_tablebase(fen)
+    expected_cat = tb_before.get("category", "") if tb_before else ""
+
+    # Apply the move
+    board.push(move)
+    new_fen = board.fen()
+
+    # Get tablebase AFTER the move (from opponent's perspective)
+    tb_after = chess_data.get_tablebase(new_fen)
+
+    # Determine verdict
+    verdict = "win"
+    msg = ""
+    if board.is_checkmate():
+        msg = (
+            '<div style="background:#1a3525;border:1px solid #2e7d32;border-radius:8px;'
+            'padding:10px 14px;margin-bottom:8px;">'
+            f'<span style="color:#66bb6a;font-weight:700;">Checkmate! {san} wins the game.</span>'
+            '</div>'
+        )
+        verdict = "win"
+    elif board.is_game_over():
+        msg = (
+            '<div style="background:#1a1a2e;border:1px solid #4a4a6a;border-radius:8px;'
+            'padding:10px 14px;margin-bottom:8px;">'
+            f'<span style="color:#aaa;font-weight:700;">Draw after {san}.</span>'
+            '</div>'
+        )
+        verdict = "draw"
+    elif tb_after:
+        # From opponent's perspective: opponent's "win" = our "loss"
+        opp_cat = tb_after.get("category", "")
+        opp_dtm = tb_after.get("dtm")
+
+        if expected_cat == "win":
+            if opp_cat == "loss":
+                dtm_text = f" (mate in {abs(opp_dtm)})" if opp_dtm is not None else ""
+                # Check if this was the optimal move
+                best_dtm = None
+                if tb_before:
+                    best_moves = [m for m in tb_before.get("moves", []) if m.get("category") == "win"]
+                    if best_moves and best_moves[0].get("dtm") is not None:
+                        best_dtm = abs(best_moves[0]["dtm"])
+                if best_dtm and opp_dtm is not None and abs(opp_dtm) == best_dtm:
+                    msg = (
+                        '<div style="background:#1a3525;border:1px solid #2e7d32;border-radius:8px;'
+                        f'padding:10px 14px;margin-bottom:8px;">'
+                        f'<span style="color:#66bb6a;font-weight:700;">Optimal! </span>'
+                        f'<span style="color:#a0bccc;">{san} is the fastest winning move{dtm_text}.</span>'
+                        '</div>'
+                    )
+                else:
+                    msg = (
+                        '<div style="background:#1a3525;border:1px solid #2e7d32;border-radius:8px;'
+                        f'padding:10px 14px;margin-bottom:8px;">'
+                        f'<span style="color:#66bb6a;font-weight:700;">Winning! </span>'
+                        f'<span style="color:#a0bccc;">{san} maintains the win{dtm_text}.</span>'
+                        '</div>'
+                    )
+                verdict = "win"
+            elif opp_cat == "draw" or opp_cat == "blessed-loss":
+                msg = (
+                    '<div style="background:#2a2010;border:1px solid #e6a800;border-radius:8px;'
+                    f'padding:10px 14px;margin-bottom:8px;">'
+                    f'<span style="color:#ffb74d;font-weight:700;">Inaccurate! </span>'
+                    f'<span style="color:#a0bccc;">{san} only draws — you had a win.</span>'
+                    '</div>'
+                )
+                verdict = "draw"
+            elif opp_cat == "win":
+                msg = (
+                    '<div style="background:#2a1515;border:1px solid #c62828;border-radius:8px;'
+                    f'padding:10px 14px;margin-bottom:8px;">'
+                    f'<span style="color:#e57373;font-weight:700;">Losing! </span>'
+                    f'<span style="color:#a0bccc;">{san} throws away the win.</span>'
+                    '</div>'
+                )
+                verdict = "loss"
+        elif expected_cat == "draw":
+            if opp_cat == "loss":
+                msg = (
+                    '<div style="background:#1a3525;border:1px solid #2e7d32;border-radius:8px;'
+                    f'padding:10px 14px;margin-bottom:8px;">'
+                    f'<span style="color:#66bb6a;font-weight:700;">Winning! </span>'
+                    f'<span style="color:#a0bccc;">{san} — opponent has lost.</span>'
+                    '</div>'
+                )
+                verdict = "win"
+            elif opp_cat == "draw" or opp_cat == "blessed-loss":
+                msg = (
+                    '<div style="background:#111827;border:1px solid #1e2e3e;border-radius:8px;'
+                    f'padding:10px 14px;margin-bottom:8px;">'
+                    f'<span style="color:#aaa;font-weight:700;">Correct. </span>'
+                    f'<span style="color:#a0bccc;">{san} holds the draw.</span>'
+                    '</div>'
+                )
+                verdict = "draw"
+            elif opp_cat == "win":
+                msg = (
+                    '<div style="background:#2a1515;border:1px solid #c62828;border-radius:8px;'
+                    f'padding:10px 14px;margin-bottom:8px;">'
+                    f'<span style="color:#e57373;font-weight:700;">Mistake! </span>'
+                    f'<span style="color:#a0bccc;">{san} loses the draw.</span>'
+                    '</div>'
+                )
+                verdict = "loss"
+
+    history.append({"san": san, "verdict": verdict, "side": "user"})
+
+    # Opponent's response (tablebase best move)
+    if not board.is_game_over() and tb_after and tb_after.get("moves"):
+        best_resp = tb_after["moves"][0]
+        resp_uci = best_resp.get("uci", "")
+        if resp_uci:
+            try:
+                resp_move = chess.Move.from_uci(resp_uci)
+                resp_san = board.san(resp_move)
+                board.push(resp_move)
+                new_fen = board.fen()
+                history.append({"san": resp_san, "verdict": "opponent", "side": "opponent"})
+
+                if board.is_checkmate():
+                    msg += (
+                        '<div style="background:#2a1515;border:1px solid #c62828;border-radius:8px;'
+                        'padding:10px 14px;margin-top:6px;">'
+                        f'<span style="color:#e57373;">Opponent plays {resp_san} — checkmate.</span>'
+                        '</div>'
+                    )
+                    st.session_state["_et_status"] = "done"
+                elif board.is_game_over():
+                    msg += (
+                        f'<div style="font-size:0.82em;color:#7a9ab0;margin-top:4px;">'
+                        f'Opponent plays {resp_san} — draw.</div>'
+                    )
+                    st.session_state["_et_status"] = "done"
+                else:
+                    msg += (
+                        f'<div style="font-size:0.82em;color:#7a9ab0;margin-top:4px;">'
+                        f'Opponent plays {resp_san}.</div>'
+                    )
+            except Exception:
+                pass
+
+    st.session_state["_et_fen"] = board.fen()
+    st.session_state["_et_history"] = history
+    st.session_state["_et_message"] = msg
+    st.rerun()
+
+
 def render_puzzles_tab():
     # ── Require profile summaries ─────────────────────────────────────────────
     if "profile_summaries" not in st.session_state:
@@ -7661,6 +8151,33 @@ def _build_coach_context() -> str:
                 + f" (worst phase: {_worst_ph})"
             )
 
+    # Add master database stats for the player's openings
+    if summaries:
+        _op_fens: dict[str, str] = {}
+        for s in summaries:
+            _op_name = s.get("opening", "")[:40]
+            if _op_name and _op_name not in _op_fens:
+                _first_cm = (s.get("critical_moves") or [{}])[0]
+                _op_fen = _first_cm.get("fen_before", "")
+                if _op_fen:
+                    _op_fens[_op_name] = _op_fen
+        _master_lines = []
+        for _op_name, _op_fen in list(_op_fens.items())[:4]:
+            _op_stats = chess_data.get_opening_stats(_op_fen)
+            if _op_stats and _op_stats.get("total", 0) > 100:
+                _t = _op_stats["total"]
+                _w = _op_stats.get("white", 0)
+                _d = _op_stats.get("draws", 0)
+                _top_moves = _op_stats.get("moves", [])[:3]
+                _top_str = ", ".join(f"{m['san']} ({round(100*m['white']/(m['white']+m['draws']+m['black']))}%W)" for m in _top_moves if m.get("white",0)+m.get("draws",0)+m.get("black",0) > 0)
+                _master_lines.append(
+                    f"  - {_op_name}: {_t:,} master games, "
+                    f"White wins {round(100*_w/_t)}%. Top moves: {_top_str}"
+                )
+        if _master_lines:
+            lines.append("\nMaster database stats for their openings (cite these when discussing openings):")
+            lines.extend(_master_lines)
+
     return "\n".join(lines)
 
 
@@ -10098,6 +10615,144 @@ def render_openings_tab():
         unsafe_allow_html=True,
     )
 
+    # ── Position Explorer — works for everyone ────────────────────────────
+    with st.expander("Position Explorer — look up any position", expanded=False):
+        st.markdown(
+            '<div style="font-size:0.82em;color:#7a9ab0;margin-bottom:8px;">'
+            'Paste a FEN to see master statistics, tablebase verdicts, or cloud evaluations.</div>',
+            unsafe_allow_html=True,
+        )
+        _pe_fen = st.text_input(
+            "FEN position:", key="_pe_fen_input",
+            placeholder="rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+        )
+        if _pe_fen.strip():
+            try:
+                _pe_board = chess.Board(_pe_fen.strip())
+            except Exception:
+                st.error("Invalid FEN format.")
+                _pe_board = None
+
+            if _pe_board:
+                _pe_pieces = sum(1 for c in _pe_fen.split()[0] if c.isalpha())
+                _pe_col1, _pe_col2 = st.columns([1, 1])
+
+                with _pe_col1:
+                    _pe_svg = chess.svg.board(
+                        _pe_board, size=280, coordinates=True,
+                        colors={"square light": "#e8dcc8", "square dark": "#7a945a"},
+                    )
+                    st.markdown(
+                        f'<div style="display:flex;justify-content:center;">{_pe_svg}</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                with _pe_col2:
+                    # Master database lookup
+                    _pe_stats = chess_data.get_opening_stats(_pe_fen.strip())
+                    if _pe_stats:
+                        _pe_t = _pe_stats["total"]
+                        _pe_w = _pe_stats.get("white", 0)
+                        _pe_d = _pe_stats.get("draws", 0)
+                        _pe_b = _pe_stats.get("black", 0)
+                        _pe_op = _pe_stats.get("opening")
+                        _pe_op_name = f' — {_pe_op["name"]}' if _pe_op and _pe_op.get("name") else ""
+                        st.markdown(
+                            f'<div style="background:#111827;border:1px solid #1e2e3e;border-radius:8px;'
+                            f'padding:10px 14px;margin-bottom:8px;">'
+                            f'<div style="font-size:0.72em;color:#5a7ac8;font-weight:700;'
+                            f'letter-spacing:0.04em;margin-bottom:4px;">MASTERS DATABASE{_pe_op_name}</div>'
+                            f'<div style="font-size:0.85em;color:#b0c8d8;">'
+                            f'{_pe_t:,} games: '
+                            f'<span style="color:#81c784;">{round(100*_pe_w/_pe_t)}%W</span> · '
+                            f'<span style="color:#aaa;">{round(100*_pe_d/_pe_t)}%D</span> · '
+                            f'<span style="color:#e57373;">{round(100*_pe_b/_pe_t)}%B</span>'
+                            f'</div></div>',
+                            unsafe_allow_html=True,
+                        )
+                        _pe_moves = _pe_stats.get("moves", [])[:6]
+                        if _pe_moves:
+                            _pe_mv_html = ""
+                            for _pm in _pe_moves:
+                                _pm_t = _pm.get("white", 0) + _pm.get("draws", 0) + _pm.get("black", 0)
+                                if _pm_t == 0:
+                                    continue
+                                _pm_wr = round(100 * _pm["white"] / _pm_t)
+                                _pm_pop = round(100 * _pm_t / _pe_t)
+                                _pe_mv_html += (
+                                    f'<div style="display:flex;justify-content:space-between;'
+                                    f'padding:3px 0;border-bottom:1px solid #1a2535;font-size:0.82em;">'
+                                    f'<span style="color:#cce0f4;font-weight:600;">{_pm["san"]}</span>'
+                                    f'<span style="color:#7a9ab0;">{_pm_pop}% played</span>'
+                                    f'<span style="color:#81c784;">{_pm_wr}%W</span>'
+                                    f'</div>'
+                                )
+                            st.markdown(
+                                f'<div style="background:#111827;border:1px solid #1e2e3e;'
+                                f'border-radius:8px;padding:10px 14px;">'
+                                f'<div style="font-size:0.72em;color:#5a7ac8;font-weight:700;'
+                                f'letter-spacing:0.04em;margin-bottom:6px;">TOP MOVES</div>'
+                                f'{_pe_mv_html}</div>',
+                                unsafe_allow_html=True,
+                            )
+                    else:
+                        _pe_li = chess_data.get_opening_stats_lichess(_pe_fen.strip())
+                        if _pe_li:
+                            _pe_t = _pe_li["total"]
+                            st.markdown(
+                                f'<div style="font-size:0.82em;color:#7a9ab0;margin-bottom:6px;">'
+                                f'Not in masters DB. Lichess games: {_pe_t:,} results found.</div>',
+                                unsafe_allow_html=True,
+                            )
+
+                    # Tablebase lookup (for endgames)
+                    if _pe_pieces <= 7:
+                        _pe_tb = chess_data.get_tablebase(_pe_fen.strip())
+                        if _pe_tb:
+                            _pe_cat = _pe_tb.get("category", "")
+                            _pe_dtm = _pe_tb.get("dtm")
+                            _pe_side = "White" if _pe_board.turn == chess.WHITE else "Black"
+                            _pe_cat_map = {
+                                "win": ("4caf50", f"{_pe_side} wins"),
+                                "loss": ("e57373", f"{_pe_side} loses"),
+                                "draw": ("aaaaaa", "Draw"),
+                                "cursed-win": ("ff9800", f"{_pe_side} wins (50-move draw)"),
+                                "blessed-loss": ("ff9800", f"{_pe_side} loses (50-move draw)"),
+                            }
+                            _pe_c, _pe_v = _pe_cat_map.get(_pe_cat, ("aaa", _pe_cat))
+                            _pe_dtm_text = f" — mate in {abs(_pe_dtm)}" if _pe_dtm is not None else ""
+                            st.markdown(
+                                f'<div style="background:#111827;border:1px solid #1e2e3e;'
+                                f'border-radius:8px;padding:10px 14px;margin-top:8px;">'
+                                f'<div style="font-size:0.72em;color:#5a7ac8;font-weight:700;'
+                                f'letter-spacing:0.04em;margin-bottom:4px;">TABLEBASE</div>'
+                                f'<div style="font-size:0.88em;color:#{_pe_c};font-weight:700;">'
+                                f'{_pe_v}{_pe_dtm_text}</div></div>',
+                                unsafe_allow_html=True,
+                            )
+
+                    # Cloud eval
+                    _pe_cloud = chess_data.get_cloud_eval(_pe_fen.strip())
+                    if _pe_cloud:
+                        _pe_depth = _pe_cloud.get("depth", "?")
+                        _pe_pvs = _pe_cloud.get("pvs", [])
+                        if _pe_pvs:
+                            _pe_pv = _pe_pvs[0]
+                            _pe_cp = _pe_pv.get("cp")
+                            _pe_mate = _pe_pv.get("mate")
+                            if _pe_cp is not None:
+                                _pe_eval_str = f"{_pe_cp/100:+.2f}"
+                            elif _pe_mate is not None:
+                                _pe_eval_str = f"M{_pe_mate}" if _pe_mate > 0 else f"-M{abs(_pe_mate)}"
+                            else:
+                                _pe_eval_str = "?"
+                            st.markdown(
+                                f'<div style="font-size:0.78em;color:#7a9ab0;margin-top:6px;">'
+                                f'Cloud eval (depth {_pe_depth}): <b style="color:#cce0f4;">'
+                                f'{_pe_eval_str}</b></div>',
+                                unsafe_allow_html=True,
+                            )
+
     summaries = st.session_state.get("profile_summaries", [])
     if not summaries:
         st.info("Build your profile from the **Dashboard** to see your opening stats.")
@@ -10671,6 +11326,10 @@ if st.session_state.pop("navigate_to_review", False):
 if st.session_state.pop("navigate_to_puzzles", False):
     components.html(_js_tab_click("puzzles"), height=0)
 
+if st.session_state.pop("navigate_to_endgame_trainer", False):
+    st.session_state.puzzles_section = "Endgame Trainer"
+    components.html(_js_tab_click("puzzles"), height=0)
+
 if st.session_state.pop("navigate_to_profile", False):
     st.session_state.profile_section = "Player Profile"
     components.html(_js_tab_click("profile"), height=0)
@@ -10801,7 +11460,17 @@ with tab_learn:
             render_coach_tab()
 
 with tab_puzzles:
-    render_puzzles_tab()
+    _puz_section = st.radio(
+        "Section",
+        ["Tactics", "Endgame Trainer"],
+        horizontal=True,
+        key="puzzles_section",
+        label_visibility="collapsed",
+    )
+    if _puz_section == "Tactics":
+        render_puzzles_tab()
+    else:
+        render_endgame_trainer()
 
 with tab_review:
     render_game_review_tab()
