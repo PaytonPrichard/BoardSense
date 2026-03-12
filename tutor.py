@@ -121,6 +121,8 @@ def explain_move(
     game_phase: str = "",
     generate_concepts: bool = False,
     top_candidates: list[dict] | None = None,
+    opening_context: str = "",
+    tablebase_context: str = "",
 ) -> dict:
     """
     Ask Claude to explain a specific move at grandmaster depth.
@@ -186,6 +188,13 @@ def explain_move(
 
     concepts_field = ', "concepts": ["Concept1", "Concept2"]' if generate_concepts else ""
 
+    # External data context (opening explorer, tablebase, etc.)
+    external_data = ""
+    if opening_context:
+        external_data += f"\n\nMASTER DATABASE CONTEXT\n{opening_context}"
+    if tablebase_context:
+        external_data += f"\n\nENDGAME TABLEBASE (perfect play)\n{tablebase_context}"
+
     prompt = f"""You are a grandmaster-level chess coach. Analyse this move with precision and brevity.
 
 POSITION & MOVE
@@ -194,7 +203,7 @@ FEN before move: {fen}
 Evaluation shift: {eval_before:+.2f} → {eval_after:+.2f} (positive = White winning){phase_text}
 Move history: {history_text}{best_section}{candidates_section}
 
-ENGINE CONTINUATION after {move_san}:{followup_section}{best_continuation_section}
+ENGINE CONTINUATION after {move_san}:{followup_section}{best_continuation_section}{external_data}
 
 Return ONLY valid JSON (no markdown, no code fences):
 {{
@@ -212,7 +221,12 @@ Instructions per insight (30–50 words each, use move names throughout):
 - Immediate Threat: what happens in the very next 1–2 moves for both sides; name the moves
 - Engine Line: reference the continuation above and explain the mechanism, not just "White is better"
 - {insight4_label}: {instruction}
-- Chess Principle: name the exact concept (e.g. "overloading the rook on e8", "trading the bad bishop", "the two-weakness principle")"""
+- Chess Principle: name the exact concept (e.g. "overloading the rook on e8", "trading the bad bishop", "the two-weakness principle")
+
+When MASTER DATABASE or TABLEBASE data is provided above, incorporate it:
+- Reference master game statistics and win rates when discussing opening moves
+- Cite tablebase verdicts as definitive truth for endgame positions — do not speculate when perfect play is known
+- Name specific master continuations and explain WHY masters prefer them"""
 
     if generate_concepts:
         prompt += (
@@ -243,6 +257,8 @@ def generate_concept_lesson(
     concept: str,
     game_examples: list[dict] | None = None,
     enriched_examples: list[dict] | None = None,
+    opening_context: str = "",
+    tablebase_context: str = "",
 ) -> str:
     """
     Generate a focused educational lesson on a chess concept.
@@ -370,7 +386,17 @@ Guidelines:
 - "Key rule of thumb": one memorable, punchy sentence they can recall mid-game at the board
 - When referencing the student's games, cite the eval shift to show WHY the move was wrong
   (e.g. "Your 14.Bxf7 dropped the eval from +0.5 to -2.1 because...")
-- Name specific squares, pieces, and lines — never say "a piece" when you mean "the knight on d5"{example_instruction}"""
+- Name specific squares, pieces, and lines — never say "a piece" when you mean "the knight on d5"
+- When master database or tablebase data is provided below, treat it as ground truth — cite real statistics, master win rates, and tablebase verdicts rather than relying on general chess knowledge{example_instruction}"""
+
+    # Inject external data context
+    external_data = ""
+    if opening_context:
+        external_data += f"\n\nMASTER DATABASE REFERENCE DATA:\n{opening_context}"
+    if tablebase_context:
+        external_data += f"\n\nENDGAME TABLEBASE REFERENCE DATA:\n{tablebase_context}"
+    if external_data:
+        prompt += external_data
 
     try:
         message = client.messages.create(
@@ -660,7 +686,8 @@ Reply with ONLY the explanation text. No quotes, no labels, no markdown."""
     return _validate_move_refs(message.content[0].text.strip(), fen)
 
 
-def full_game_review(game_moves: list[dict], pgn_headers: dict) -> dict:
+def full_game_review(game_moves: list[dict], pgn_headers: dict,
+                     opening_context: str = "", endgame_context: str = "") -> dict:
     """
     Send a structured summary of the whole game to Claude and get a full review.
 
@@ -764,7 +791,20 @@ Critical moments:
 
 Full annotated move list:
 {full_move_list}
-
+"""
+    if opening_context:
+        prompt += f"""
+MASTER OPENING DATABASE:
+{opening_context}
+Use these real master statistics when discussing the opening phase — cite win rates and master preferences.
+"""
+    if endgame_context:
+        prompt += f"""
+ENDGAME TABLEBASE (perfect play):
+{endgame_context}
+When discussing the endgame, cite the tablebase verdict as definitive. Do not speculate about endgame outcomes when perfect play data is available.
+"""
+    prompt += """
 Respond ONLY with valid JSON (no markdown, no code fences) in this exact format:
 {{
   "summary": "2-3 sentence overview of how the game went and who had the advantage",

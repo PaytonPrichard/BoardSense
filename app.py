@@ -36,6 +36,7 @@ from curriculum import CURRICULUM, get_stage_for_rating, get_recommended_modules
 import db
 import chesscom
 import lichess
+import chess_data
 
 # ── Background profile build registry ────────────────────────────────────────
 _BUILD_LOCK = threading.Lock()
@@ -1263,6 +1264,18 @@ def move_commentary_panel(move: dict, all_moves: list[dict], idx: int):
             )
             history = [m["move_san"] for m in all_moves[:idx]]
 
+            # Fetch external data to ground Claude's analysis
+            _ext_opening = ""
+            _ext_tablebase = ""
+            if game_phase == "opening":
+                _op_stats = chess_data.get_opening_stats(move["fen_before"])
+                if _op_stats:
+                    _ext_opening = chess_data.format_opening_context(_op_stats)
+            elif game_phase == "endgame":
+                _tb = chess_data.get_tablebase(move["fen_before"])
+                if _tb:
+                    _ext_tablebase = chess_data.format_tablebase_context(_tb, move["fen_before"])
+
             st.session_state[key_exp] = explain_move(
                 move["fen_before"], move["move_san"],
                 f"{move['eval_after']:+.2f}", history,
@@ -1276,6 +1289,8 @@ def move_commentary_panel(move: dict, all_moves: list[dict], idx: int):
                 game_phase=game_phase,
                 generate_concepts=(cls in _CONCEPT_CLS),
                 top_candidates=move.get("top_candidates"),
+                opening_context=_ext_opening,
+                tablebase_context=_ext_tablebase,
             )
 
     if key_exp in st.session_state:
@@ -1481,7 +1496,26 @@ def _run_review(moves, headers):
         return
     _count_api_call()
     with st.spinner("Claude is reviewing the game..."):
-        st.session_state.game_review = full_game_review(moves, headers)
+        # Fetch opening stats for the initial position
+        _rev_opening_ctx = ""
+        if moves:
+            _rev_op_stats = chess_data.get_opening_stats(moves[0].get("fen_before", ""))
+            if _rev_op_stats:
+                _rev_opening_ctx = chess_data.format_opening_context(_rev_op_stats)
+
+        # Fetch tablebase for the final position if it's an endgame
+        _rev_endgame_ctx = ""
+        if moves:
+            _rev_last_fen = moves[-1].get("fen_after", "")
+            _rev_tb = chess_data.get_tablebase(_rev_last_fen)
+            if _rev_tb:
+                _rev_endgame_ctx = chess_data.format_tablebase_context(_rev_tb, _rev_last_fen)
+
+        st.session_state.game_review = full_game_review(
+            moves, headers,
+            opening_context=_rev_opening_ctx,
+            endgame_context=_rev_endgame_ctx,
+        )
 
 
 def parse_all_games(pgn_text: str) -> list[tuple[dict, str]]:
@@ -2564,6 +2598,27 @@ def _concept_to_category(concept: str) -> str:
     return "Tactics"
 
 
+def _fetch_lesson_context(concept: str, enriched_examples: list[dict] | None = None) -> tuple[str, str]:
+    """Fetch opening explorer / tablebase data to ground a concept lesson."""
+    category = _concept_to_category(concept)
+    opening_ctx = ""
+    tablebase_ctx = ""
+    if enriched_examples:
+        fen = enriched_examples[0].get("fen", "")
+        if fen:
+            if category in ("Pawn Structure", "Piece Play", "Positional"):
+                stats = chess_data.get_opening_stats(fen)
+                if not stats:
+                    stats = chess_data.get_opening_stats_lichess(fen)
+                if stats:
+                    opening_ctx = chess_data.format_opening_context(stats)
+            elif category == "Endgame":
+                tb = chess_data.get_tablebase(fen)
+                if tb:
+                    tablebase_ctx = chess_data.format_tablebase_context(tb, fen)
+    return opening_ctx, tablebase_ctx
+
+
 def _build_course_puzzles(concept: str, category: str, n: int = 5) -> list[dict]:
     """
     Build a list of puzzle dicts from profile summaries (or current game as fallback),
@@ -3022,8 +3077,10 @@ def _render_concept_detail(concept: str, *, show_header: bool = True):
             with lesson_area.container():
                 _render_lesson_loading_card(concept)
             _enriched = _build_enriched_examples(concept, examples)
+            _lctx_o, _lctx_t = _fetch_lesson_context(concept, _enriched)
             st.session_state[lesson_key] = generate_concept_lesson(
                 concept, examples, enriched_examples=_enriched if _enriched else None,
+                opening_context=_lctx_o, tablebase_context=_lctx_t,
             )
             _count_lesson_gen()
             db.save_lesson(_current_user(), concept, st.session_state[lesson_key])
@@ -3057,8 +3114,10 @@ def _render_concept_detail(concept: str, *, show_header: bool = True):
         with lesson_area.container():
             _render_lesson_loading_card(concept, regenerating=True)
         _enriched = _build_enriched_examples(concept, examples)
+        _lctx_o, _lctx_t = _fetch_lesson_context(concept, _enriched)
         st.session_state[lesson_key] = generate_concept_lesson(
             concept, examples, enriched_examples=_enriched if _enriched else None,
+            opening_context=_lctx_o, tablebase_context=_lctx_t,
         )
         _count_lesson_gen()
         db.save_lesson(_current_user(), concept, st.session_state[lesson_key])
@@ -3252,8 +3311,10 @@ def render_course_view():
                 with lesson_area.container():
                     _render_lesson_loading_card(concept)
                 _enriched = _build_enriched_examples(concept)
+                _lctx_o, _lctx_t = _fetch_lesson_context(concept, _enriched)
                 st.session_state[lesson_key] = generate_concept_lesson(
                     concept, [], enriched_examples=_enriched if _enriched else None,
+                    opening_context=_lctx_o, tablebase_context=_lctx_t,
                 )
                 _count_lesson_gen()
                 db.save_lesson(_current_user(), concept, st.session_state[lesson_key])
@@ -3575,9 +3636,11 @@ def _bulk_generate_lessons(concepts: list[dict]):
         )
         examples = c.get("examples", [])[:3]
         _enriched = _build_enriched_examples(c["name"], examples)
+        _lctx_o, _lctx_t = _fetch_lesson_context(c["name"], _enriched)
         lesson = generate_concept_lesson(
             c["name"], examples if examples else None,
             enriched_examples=_enriched if _enriched else None,
+            opening_context=_lctx_o, tablebase_context=_lctx_t,
         )
         _count_lesson_gen()
         db.save_lesson(_current_user(), c["name"], lesson)
@@ -8468,6 +8531,109 @@ def _render_compare_profiles():
     st.markdown(_tbl_html, unsafe_allow_html=True)
 
 
+def _render_daily_puzzle():
+    """Show the Lichess daily puzzle on the dashboard."""
+    dp = chess_data.get_daily_puzzle()
+    if not dp:
+        return
+    puzzle = dp.get("puzzle", {})
+    game = dp.get("game", {})
+    if not puzzle or not puzzle.get("solution"):
+        return
+
+    rating = puzzle.get("rating", "?")
+    themes = puzzle.get("themes", [])
+    solution_uci = puzzle.get("solution", [])
+    initial_ply = puzzle.get("initialPly", 0)
+
+    # Parse the PGN to get the position
+    pgn_text = game.get("pgn", "")
+    if not pgn_text:
+        return
+    try:
+        _dp_game = chess.pgn.read_game(io.StringIO(pgn_text))
+        if not _dp_game:
+            return
+        _dp_board = _dp_game.board()
+        _dp_moves = list(_dp_game.mainline_moves())
+        for _dp_m in _dp_moves[:initial_ply]:
+            _dp_board.push(_dp_m)
+        # Apply the opponent's setup move (first in solution)
+        _dp_setup = chess.Move.from_uci(solution_uci[0])
+        _dp_board.push(_dp_setup)
+        _dp_fen = _dp_board.fen()
+        _dp_color = "White" if _dp_board.turn == chess.WHITE else "Black"
+        # The actual answer is the second move in solution
+        _dp_answer_uci = solution_uci[1] if len(solution_uci) > 1 else solution_uci[0]
+        _dp_answer_san = _dp_board.san(chess.Move.from_uci(_dp_answer_uci))
+    except Exception:
+        return
+
+    themes_text = ", ".join(t.replace("_", " ").title() for t in themes[:3]) if themes else "Tactics"
+
+    st.markdown(
+        '<div style="border-top:1px solid #1e2e3e;padding-top:12px;margin-top:16px;">'
+        '<div style="display:flex;align-items:center;gap:9px;margin-bottom:10px;">'
+        '<div style="width:3px;height:15px;background:#5a7ac8;border-radius:2px;flex-shrink:0;"></div>'
+        '<span style="font-size:0.82em;color:#7ab0e0;font-weight:700;letter-spacing:0.04em;">'
+        'DAILY PUZZLE</span>'
+        f'<span style="font-size:0.72em;color:#5a7a8a;">Rating {rating} · {themes_text}</span>'
+        '</div></div>',
+        unsafe_allow_html=True,
+    )
+
+    _dp_c1, _dp_c2 = st.columns([2, 1])
+    with _dp_c1:
+        _dp_svg = chess.svg.board(
+            _dp_board, size=300, coordinates=True,
+            colors={"square light": "#e8dcc8", "square dark": "#7a945a"},
+        )
+        st.markdown(
+            f'<div style="display:flex;justify-content:center;">{_dp_svg}</div>',
+            unsafe_allow_html=True,
+        )
+    with _dp_c2:
+        st.markdown(
+            f'<div style="padding:8px 0;">'
+            f'<div style="font-size:0.88em;color:#cce0f4;font-weight:600;margin-bottom:8px;">'
+            f'{_dp_color} to move</div>'
+            f'<div style="font-size:0.78em;color:#7a9ab0;line-height:1.6;">'
+            f'Find the best move. This puzzle has been rated {rating} on Lichess.</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+        _dp_reveal_key = "_daily_puzzle_revealed"
+        if st.button("Show Answer", key="daily_puzzle_reveal"):
+            st.session_state[_dp_reveal_key] = True
+        if st.session_state.get(_dp_reveal_key):
+            full_line = []
+            _dp_temp = _dp_board.copy()
+            for _dp_u in solution_uci[1:]:
+                try:
+                    _dp_mv = chess.Move.from_uci(_dp_u)
+                    full_line.append(_dp_temp.san(_dp_mv))
+                    _dp_temp.push(_dp_mv)
+                except Exception:
+                    break
+            st.markdown(
+                f'<div style="background:#0d1f30;border:1px solid #1e3050;border-radius:8px;'
+                f'padding:10px 14px;margin-top:8px;">'
+                f'<div style="font-size:0.92em;color:#e2c97e;font-weight:700;margin-bottom:4px;">'
+                f'{_dp_answer_san}</div>'
+                f'<div style="font-size:0.78em;color:#90a4b8;">'
+                f'Full line: {" ".join(full_line)}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            _dp_puzzle_url = f"https://lichess.org/training/{puzzle.get('id', '')}"
+            st.markdown(
+                f'<a href="{_dp_puzzle_url}" target="_blank" '
+                f'style="font-size:0.78em;color:#5a7ac8;">Play on Lichess →</a>',
+                unsafe_allow_html=True,
+            )
+
+
 def render_dashboard_tab():
     """Landing dashboard — stats overview, quick actions, and recommendations."""
     profile = st.session_state.get("profile_data")
@@ -8566,6 +8732,9 @@ def render_dashboard_tab():
             'in Learn &rarr; Ask Coach.</span></div>',
             unsafe_allow_html=True,
         )
+
+        # Daily puzzle for all visitors
+        _render_daily_puzzle()
         return
 
     # ── Compute dashboard data ──────────────────────────────────────────────
@@ -9261,6 +9430,9 @@ def render_dashboard_tab():
                 if _rg.get("_pgn"):
                     if st.button("Review →", key=f"dash_rg_review_{_rg_i}", use_container_width=True):
                         _deep_dive_to_review(_rg["_pgn"], _rg.get("white", "?"), _rg.get("black", "?"))
+
+    # ── Daily Puzzle ───────────────────────────────────────────────────────
+    _render_daily_puzzle()
 
 
 def render_profile_tab():
@@ -10007,6 +10179,89 @@ def render_openings_tab():
                 '</div>',
                 unsafe_allow_html=True,
             )
+
+    # ── Master database comparison ──────────────────────────────────────────
+    st.markdown("---")
+    st.markdown(
+        '<div style="display:flex;align-items:center;gap:9px;margin-bottom:12px;">'
+        '<div style="width:3px;height:15px;background:#5a7ac8;border-radius:2px;flex-shrink:0;"></div>'
+        '<span style="font-size:0.9em;color:#7ab0e0;font-weight:700;letter-spacing:0.04em;">'
+        'MASTER DATABASE</span></div>'
+        '<p style="color:#7a9ab0;font-size:0.82em;margin-bottom:12px;">'
+        'How your openings perform in master games (2200+ FIDE rated).</p>',
+        unsafe_allow_html=True,
+    )
+
+    # Collect starting FENs for each opening from the user's games
+    _master_lookup_done = st.session_state.get("_master_stats_loaded", False)
+    if not _master_lookup_done:
+        _master_stats: dict[str, dict] = {}
+        # Use the first game's FEN for each opening
+        for s in summaries:
+            op = (_get_op(s) or "Unknown")[:45]
+            if op in _master_stats or op == "Unknown":
+                continue
+            # Get the FEN after the first few moves (opening position)
+            _first_fen = s.get("critical_moves", [{}])[0].get("fen_before", "") if s.get("critical_moves") else ""
+            if not _first_fen:
+                continue
+            stats = chess_data.get_opening_stats(_first_fen)
+            if stats:
+                _master_stats[op] = stats
+        st.session_state["_master_stats_cache"] = _master_stats
+        st.session_state["_master_stats_loaded"] = True
+    else:
+        _master_stats = st.session_state.get("_master_stats_cache", {})
+
+    if _master_stats:
+        for _ms_op, _ms_data in sorted(_master_stats.items(), key=lambda x: -x[1].get("total", 0)):
+            _ms_total = _ms_data.get("total", 0)
+            _ms_w = _ms_data.get("white", 0)
+            _ms_d = _ms_data.get("draws", 0)
+            _ms_b = _ms_data.get("black", 0)
+            _ms_wr = round(100 * _ms_w / _ms_total) if _ms_total else 0
+            _ms_dr = round(100 * _ms_d / _ms_total) if _ms_total else 0
+            _ms_br = round(100 * _ms_b / _ms_total) if _ms_total else 0
+            _ms_name = ""
+            if _ms_data.get("opening") and _ms_data["opening"].get("name"):
+                _ms_name = f' — {_ms_data["opening"]["name"]}'
+
+            _ms_moves_html = ""
+            _ms_moves = _ms_data.get("moves", [])[:4]
+            if _ms_moves:
+                _ms_move_parts = []
+                for _msm in _ms_moves:
+                    _msm_t = _msm.get("white", 0) + _msm.get("draws", 0) + _msm.get("black", 0)
+                    _msm_wr = round(100 * _msm["white"] / _msm_t) if _msm_t else 0
+                    _msm_pop = round(100 * _msm_t / _ms_total) if _ms_total else 0
+                    _ms_move_parts.append(
+                        f'<span style="display:inline-block;background:#111827;border:1px solid #1e3050;'
+                        f'border-radius:6px;padding:3px 8px;margin:2px 4px 2px 0;font-size:0.82em;">'
+                        f'<b style="color:#cce0f4;">{_msm["san"]}</b> '
+                        f'<span style="color:#7a9ab0;">{_msm_pop}%</span> '
+                        f'<span style="color:#81c784;">{_msm_wr}%W</span></span>'
+                    )
+                _ms_moves_html = (
+                    f'<div style="margin-top:6px;">{"".join(_ms_move_parts)}</div>'
+                )
+
+            with st.expander(f"{_ms_op}{_ms_name}  ({_ms_total:,} master games)", expanded=False):
+                st.markdown(
+                    f'<div style="font-size:0.88em;color:#b0c8d8;">'
+                    f'<span style="color:#81c784;">{_ms_wr}% White</span> · '
+                    f'<span style="color:#aaa;">{_ms_dr}% Draw</span> · '
+                    f'<span style="color:#e57373;">{_ms_br}% Black</span>'
+                    f'{_ms_moves_html}'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+    else:
+        st.markdown(
+            '<div style="background:#111827;border:1px solid #1e2e3e;border-radius:10px;'
+            'padding:14px;text-align:center;font-size:0.85em;color:#7a9ab0;">'
+            'No master data found for your openings. Build your profile with more games.</div>',
+            unsafe_allow_html=True,
+        )
 
     st.markdown("---")
     st.markdown(
