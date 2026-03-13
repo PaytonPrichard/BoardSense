@@ -15,7 +15,7 @@ _MAX_RETRIES = 3
 _RETRY_DELAY = 0.5  # seconds
 
 # Schema version — bump when tables change to trigger migration
-_SCHEMA_VERSION = 2
+_SCHEMA_VERSION = 3
 
 
 def _connect() -> sqlite3.Connection:
@@ -134,8 +134,11 @@ def _init_db_inner():
         ).fetchone()
         current_version = row["version"] if row else 0
 
-        if current_version < _SCHEMA_VERSION:
+        if current_version < 2:
             _migrate_to_v2(conn)
+        if current_version < 3:
+            _migrate_to_v3(conn)
+        if current_version < _SCHEMA_VERSION:
             conn.execute(
                 "INSERT INTO schema_version (id, version) VALUES (1, ?) "
                 "ON CONFLICT(id) DO UPDATE SET version=excluded.version",
@@ -685,6 +688,22 @@ def get_course_score(username: str, concept: str) -> dict | None:
     return None
 
 
+def get_all_course_scores(username: str) -> dict:
+    """Return {concept: {score, total, completed_at}} for all concepts with scores."""
+    key = username.strip().lower()
+    if not key:
+        return {}
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT concept, score, total, completed_at FROM course_scores WHERE username=? COLLATE NOCASE",
+            (key,),
+        ).fetchall()
+    return {
+        row["concept"]: {"score": row["score"], "total": row["total"], "completed_at": row["completed_at"]}
+        for row in rows
+    }
+
+
 def get_review_due_concepts(username: str, days: int = 3, threshold: float = 0.8) -> list[dict]:
     """Return concepts studied 3+ days ago with score below threshold."""
     key = username.strip().lower()
@@ -917,3 +936,265 @@ def get_all_concept_mastery(username: str) -> dict[str, dict]:
             "pct": round(100 * r["correct"] / attempted) if attempted else 0,
         }
     return result
+
+
+# ── Spaced Repetition (SM-2) ──────────────────────────────────────────────
+
+def _migrate_to_v3(conn: sqlite3.Connection):
+    """Add spaced_review table for SM-2 spaced repetition."""
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS spaced_review (
+            username      TEXT,
+            concept       TEXT,
+            ease_factor   REAL    DEFAULT 2.5,
+            interval_days INTEGER DEFAULT 0,
+            repetitions   INTEGER DEFAULT 0,
+            next_review   TEXT,
+            last_review   TEXT,
+            PRIMARY KEY (username, concept)
+        );
+    """)
+
+
+def add_review_item(username: str, concept: str) -> None:
+    """Add a concept to the spaced repetition queue (first review = now)."""
+    from datetime import date
+    key = username.strip().lower()
+    if not key:
+        return
+    today = date.today().isoformat()
+    with _connect() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO spaced_review "
+            "(username, concept, ease_factor, interval_days, repetitions, next_review, last_review) "
+            "VALUES (?, ?, 2.5, 0, 0, ?, ?)",
+            (key, concept, today, today),
+        )
+
+
+def get_due_reviews(username: str) -> list[dict]:
+    """Return concepts due for review (next_review <= today), sorted by most overdue."""
+    from datetime import date
+    key = username.strip().lower()
+    if not key:
+        return []
+    today = date.today().isoformat()
+    with _connect() as conn:
+        # Ensure table exists
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS spaced_review (
+                username      TEXT,
+                concept       TEXT,
+                ease_factor   REAL    DEFAULT 2.5,
+                interval_days INTEGER DEFAULT 0,
+                repetitions   INTEGER DEFAULT 0,
+                next_review   TEXT,
+                last_review   TEXT,
+                PRIMARY KEY (username, concept)
+            )
+        """)
+        rows = conn.execute(
+            "SELECT concept, ease_factor, interval_days, repetitions, next_review, last_review "
+            "FROM spaced_review WHERE username=? AND next_review <= ? "
+            "ORDER BY next_review ASC",
+            (key, today),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_all_review_items(username: str) -> list[dict]:
+    """Return all spaced review items for a user."""
+    key = username.strip().lower()
+    if not key:
+        return []
+    with _connect() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS spaced_review (
+                username      TEXT,
+                concept       TEXT,
+                ease_factor   REAL    DEFAULT 2.5,
+                interval_days INTEGER DEFAULT 0,
+                repetitions   INTEGER DEFAULT 0,
+                next_review   TEXT,
+                last_review   TEXT,
+                PRIMARY KEY (username, concept)
+            )
+        """)
+        rows = conn.execute(
+            "SELECT concept, ease_factor, interval_days, repetitions, next_review, last_review "
+            "FROM spaced_review WHERE username=? ORDER BY next_review ASC",
+            (key,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def update_review(username: str, concept: str, quality: int) -> dict:
+    """
+    SM-2 update after a review. Quality: 0-5 (0-2 = fail, 3-5 = pass).
+    Returns {interval_days, ease_factor, next_review}.
+    """
+    from datetime import date, timedelta
+    key = username.strip().lower()
+    today = date.today()
+
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT ease_factor, interval_days, repetitions "
+            "FROM spaced_review WHERE username=? AND concept=?",
+            (key, concept),
+        ).fetchone()
+
+    if not row:
+        # Item doesn't exist yet — create it
+        add_review_item(username, concept)
+        ef, interval, reps = 2.5, 0, 0
+    else:
+        ef = row["ease_factor"]
+        interval = row["interval_days"]
+        reps = row["repetitions"]
+
+    # SM-2 algorithm
+    if quality >= 3:  # correct
+        if reps == 0:
+            interval = 1
+        elif reps == 1:
+            interval = 6
+        else:
+            interval = round(interval * ef)
+        reps += 1
+    else:  # incorrect — reset
+        reps = 0
+        interval = 1
+
+    # Update ease factor: EF' = EF + (0.1 - (5-q) * (0.08 + (5-q) * 0.02))
+    ef = ef + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02))
+    ef = max(1.3, ef)  # minimum ease factor
+
+    next_review = (today + timedelta(days=interval)).isoformat()
+
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE spaced_review SET ease_factor=?, interval_days=?, repetitions=?, "
+            "next_review=?, last_review=? WHERE username=? AND concept=?",
+            (ef, interval, reps, next_review, today.isoformat(), key, concept),
+        )
+
+    return {"interval_days": interval, "ease_factor": ef, "next_review": next_review}
+
+
+def get_review_stats(username: str) -> dict:
+    """Return summary stats: total items, due today, mastered (interval >= 21 days)."""
+    from datetime import date
+    key = username.strip().lower()
+    if not key:
+        return {"total": 0, "due": 0, "mastered": 0}
+    today = date.today().isoformat()
+    with _connect() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS spaced_review (
+                username      TEXT,
+                concept       TEXT,
+                ease_factor   REAL    DEFAULT 2.5,
+                interval_days INTEGER DEFAULT 0,
+                repetitions   INTEGER DEFAULT 0,
+                next_review   TEXT,
+                last_review   TEXT,
+                PRIMARY KEY (username, concept)
+            )
+        """)
+        total = conn.execute(
+            "SELECT COUNT(*) as c FROM spaced_review WHERE username=?", (key,)
+        ).fetchone()["c"]
+        due = conn.execute(
+            "SELECT COUNT(*) as c FROM spaced_review WHERE username=? AND next_review <= ?",
+            (key, today),
+        ).fetchone()["c"]
+        mastered = conn.execute(
+            "SELECT COUNT(*) as c FROM spaced_review WHERE username=? AND interval_days >= 21",
+            (key,),
+        ).fetchone()["c"]
+    return {"total": total, "due": due, "mastered": mastered}
+
+
+# ── Opening Repertoire ────────────────────────────────────────────────────
+
+def _ensure_repertoire_table(conn):
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS repertoire (
+            username  TEXT,
+            color     TEXT,
+            fen       TEXT,
+            move_san  TEXT,
+            move_uci  TEXT,
+            note      TEXT DEFAULT '',
+            added_at  TEXT DEFAULT (datetime('now')),
+            PRIMARY KEY (username, fen)
+        )
+    """)
+
+
+def save_repertoire_move(username: str, color: str, fen: str,
+                         move_san: str, move_uci: str, note: str = "") -> None:
+    """Save a repertoire move for a position."""
+    key = username.strip().lower()
+    if not key:
+        return
+    with _connect() as conn:
+        _ensure_repertoire_table(conn)
+        conn.execute(
+            "INSERT INTO repertoire (username, color, fen, move_san, move_uci, note) "
+            "VALUES (?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(username, fen) DO UPDATE SET "
+            "move_san=excluded.move_san, move_uci=excluded.move_uci, "
+            "color=excluded.color, note=excluded.note, added_at=excluded.added_at",
+            (key, color, fen, move_san, move_uci, note),
+        )
+
+
+def get_repertoire(username: str, color: str | None = None) -> list[dict]:
+    """Return all repertoire entries, optionally filtered by color."""
+    key = username.strip().lower()
+    if not key:
+        return []
+    with _connect() as conn:
+        _ensure_repertoire_table(conn)
+        if color:
+            rows = conn.execute(
+                "SELECT color, fen, move_san, move_uci, note, added_at "
+                "FROM repertoire WHERE username=? AND color=? ORDER BY added_at",
+                (key, color),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT color, fen, move_san, move_uci, note, added_at "
+                "FROM repertoire WHERE username=? ORDER BY added_at",
+                (key,),
+            ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_repertoire_move(username: str, fen: str) -> dict | None:
+    """Get the repertoire move for a specific position."""
+    key = username.strip().lower()
+    if not key:
+        return None
+    with _connect() as conn:
+        _ensure_repertoire_table(conn)
+        row = conn.execute(
+            "SELECT color, fen, move_san, move_uci, note FROM repertoire "
+            "WHERE username=? AND fen=?",
+            (key, fen),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def delete_repertoire_move(username: str, fen: str) -> None:
+    """Remove a repertoire entry."""
+    key = username.strip().lower()
+    if not key:
+        return
+    with _connect() as conn:
+        _ensure_repertoire_table(conn)
+        conn.execute(
+            "DELETE FROM repertoire WHERE username=? AND fen=?", (key, fen)
+        )

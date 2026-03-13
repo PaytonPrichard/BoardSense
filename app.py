@@ -125,7 +125,7 @@ st.set_page_config(
     page_title="BoardSense",
     page_icon="♔",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 # ── Board settings constants ─────────────────────────────────────────────────
@@ -165,11 +165,125 @@ st.markdown("""
         ) 0 0 / 52px 52px;
     }
 
-    /* ── Main content card floating above the board ──────────────────────── */
+    /* ── Reusable component classes ────────────────────────────────────── */
+    .bs-card {
+        background: #111827;
+        border: 1px solid #1e2e3e;
+        border-radius: 10px;
+        padding: 14px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    .bs-card-sm {
+        background: #111827;
+        border: 1px solid #1e2e3e;
+        border-radius: 8px;
+        padding: 10px 14px;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+    }
+    .bs-panel {
+        background: #0d1525;
+        border: 1px solid #1e2e3e;
+        border-radius: 12px;
+        padding: 16px;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+    }
+    .bs-flex {
+        display: flex;
+        align-items: center;
+    }
+    .bs-label {
+        font-size: 0.68em;
+        color: #4a6080;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+    }
+    .bs-caption {
+        font-size: 0.75em;
+        color: #7a9ab0;
+    }
+    .bs-text-sm {
+        font-size: 0.78em;
+        color: #a0bccc;
+    }
+
+    /* ── Card depth & hover effects ────────────────────────────────────── */
+    .concept-card {
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3) !important;
+        transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease !important;
+    }
+    .concept-card:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.45) !important;
+    }
+    .action-card {
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .action-card:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    }
+    .stat-card {
+        box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    }
+
+    /* ── Progress bar glow on completion ───────────────────────────────── */
+    .goal-bar-complete {
+        box-shadow: 0 0 8px rgba(129,199,132,0.5);
+    }
+
+    /* ── Achievement shimmer on unlocked ───────────────────────────────── */
+    @keyframes achShimmer {
+        0% { background-position: -200px 0; }
+        100% { background-position: 200px 0; }
+    }
+    .ach-unlocked {
+        background: linear-gradient(90deg, #111827 0%, #1a2a3e 40%, #111827 60%) !important;
+        background-size: 400px 100%;
+        animation: achShimmer 4s ease-in-out infinite;
+    }
+
+    /* ── Streak rank glow ─────────────────────────────────────────────── */
+    .streak-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.78em;
+        font-weight: 700;
+    }
+
+    /* ── Recommended next step pulse ─────────────────────────────────── */
+    @keyframes subtlePulse {
+        0%, 100% { border-color: #2a4a6a; }
+        50% { border-color: #5a7ac8; }
+    }
+    .next-step-card {
+        animation: subtlePulse 3s ease-in-out infinite;
+    }
+
+    /* ── Recent game row hover ───────────────────────────────────────── */
+    .game-row {
+        background: #111827;
+        border: 1px solid #1e2e3e;
+        border-radius: 8px;
+        padding: 8px 12px;
+        margin-bottom: 4px;
+        transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    .game-row:hover {
+        background: #152030;
+        border-color: #2a4a6a;
+    }
+
+    /* ── Main content area ──────────────────────────────────────────────── */
     .block-container {
         padding-top: 1.5rem;
         padding-bottom: 0.5rem;
         background: rgba(11, 14, 22, 0.96);
+        max-width: 100% !important;
     }
 
     /* ── Section dividers: gradient fade instead of a hard rule ──────────── */
@@ -194,43 +308,70 @@ st.markdown("""
         font-size: 1.1rem !important;
     }
 
-    /* ── Navigation pills ────────────────────────────────────────────────── */
-    [data-baseweb="tab-list"] {
-        justify-content: center !important;
-        gap: 6px !important;
+    /* ── Sidebar navigation styling ────────────────────────────────────── */
+    [data-testid="stSidebar"] {
+        background: #0a0e16 !important;
+        border-right: 1px solid #1a2535 !important;
+        padding-top: 0 !important;
+        min-width: 200px !important;
+        max-width: 220px !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stSidebarContent"] {
+        padding-top: 2.2rem !important;
+    }
+    [data-testid="stSidebar"] .stButton button {
         background: transparent !important;
-        padding: 6px 0 10px !important;
-        border-bottom: none !important;
-        flex-wrap: wrap !important;
+        border: none !important;
+        border-left: 2px solid transparent !important;
+        border-radius: 0 6px 6px 0 !important;
+        padding: 6px 12px !important;
+        color: #6a8a9a !important;
+        font-size: 0.88em !important;
+        font-weight: 500 !important;
+        text-align: left !important;
+        justify-content: flex-start !important;
+        transition: all 0.15s !important;
+        margin: 0 !important;
+        min-height: 32px !important;
     }
-    button[data-baseweb="tab"] {
-        background: #111827 !important;
-        border: 1px solid #253450 !important;
-        border-radius: 999px !important;
-        padding: 7px 18px !important;
-        color: #6a8aaa !important;
-        font-size: 0.82em !important;
-        font-weight: 600 !important;
-        letter-spacing: 0.04em !important;
-        text-transform: uppercase !important;
-        white-space: nowrap !important;
-        transition: background 0.15s, border-color 0.15s, color 0.15s !important;
+    [data-testid="stSidebar"] .stButton button:hover {
+        background: #0d1f30 !important;
+        color: #a0bccc !important;
+        border-left-color: #3a5a7a !important;
     }
-    button[data-baseweb="tab"]:hover {
-        background: #192236 !important;
-        border-color: #4a6aaa !important;
-        color: #a8c8e8 !important;
-    }
-    button[data-baseweb="tab"][aria-selected="true"] {
-        background: #172040 !important;
-        border-color: #5a7ac8 !important;
+    /* Active nav item — disabled button styled as highlight */
+    [data-testid="stSidebar"] .stButton button:disabled {
+        background: #0d1f30 !important;
+        border-left: 2px solid #5a7ac8 !important;
         color: #cce0f4 !important;
-        box-shadow: 0 0 14px rgba(74, 106, 200, 0.35) !important;
+        font-weight: 700 !important;
+        opacity: 1 !important;
+        cursor: default !important;
     }
-    /* Hide the underline — pills are self-contained */
-    [data-baseweb="tab-highlight"],
-    [data-baseweb="tab-border"] {
-        display: none !important;
+    [data-testid="stSidebar"] .stElementContainer {
+        margin-bottom: 0 !important;
+        text-align: left !important;
+    }
+    [data-testid="stSidebar"] .stMarkdown {
+        text-align: left !important;
+    }
+    /* Sidebar popover triggers (settings, user) — compact style */
+    [data-testid="stSidebar"] [data-testid="stPopoverButton"] button {
+        background: #111827 !important;
+        border: 1px solid #1e2e3e !important;
+        border-left: none !important;
+        border-radius: 6px !important;
+        padding: 5px 10px !important;
+        color: #6a8a9a !important;
+        font-size: 0.78em !important;
+        font-weight: 600 !important;
+        min-height: 28px !important;
+        justify-content: flex-start !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stPopoverButton"] button:hover {
+        background: #192236 !important;
+        border-color: #3a5a7a !important;
+        color: #a0bccc !important;
     }
 
     /* ── Widget labels (file uploader prompt, selectbox, etc.) ──────────── */
@@ -300,7 +441,7 @@ st.markdown("""
         margin-top: 1.1em !important;
         margin-bottom: 0.35em !important;
         padding-bottom: 5px !important;
-        border-bottom: 1px solid #1a2e48 !important;
+        border-bottom: 1px solid #1e2e3e !important;
     }
 
     /* ── Secondary buttons: visible but not competing with primary ─────────── */
@@ -354,8 +495,7 @@ st.markdown("""
     [data-testid="stVerticalBlockBorderWrapper"] { padding: 0; margin: 0; }
     .stElementContainer { margin-bottom: 0.25rem; }
 
-    /* ── Hide sidebar completely ──────────────────────────────────────────── */
-    [data-testid="stSidebar"] { display: none !important; }
+    /* ── Keep sidebar visible, hide collapse toggle ──────────────────────── */
     [data-testid="collapsedControl"] { display: none !important; }
 
     /* ── Fixed logo bar at top ────────────────────────────────────────────── */
@@ -368,7 +508,7 @@ st.markdown("""
         background: rgba(11, 14, 22, 0.92);
         backdrop-filter: blur(12px);
         -webkit-backdrop-filter: blur(12px);
-        border-bottom: 1px solid #1a2a3e;
+        border-bottom: 1px solid #1e2e3e;
         padding: 8px 24px;
         display: flex;
         align-items: center;
@@ -386,14 +526,6 @@ st.markdown("""
             padding-left: 0.8rem !important;
             padding-right: 0.8rem !important;
         }
-        [data-baseweb="tab-list"] {
-            gap: 3px !important;
-            padding: 4px 0 8px !important;
-        }
-        button[data-baseweb="tab"] {
-            padding: 5px 10px !important;
-            font-size: 0.72em !important;
-        }
         [data-testid="stHorizontalBlock"] {
             flex-wrap: wrap !important;
         }
@@ -409,17 +541,14 @@ st.markdown("""
         #boardsense-logo-bar span:last-child {
             display: none;
         }
-        /* Stack metric cards */
         [data-testid="metric-container"] {
             padding: 6px 8px;
         }
+        /* Hide sidebar on mobile */
+        [data-testid="stSidebar"] { display: none !important; }
     }
 
     @media (max-width: 480px) {
-        button[data-baseweb="tab"] {
-            padding: 4px 7px !important;
-            font-size: 0.65em !important;
-        }
         .block-container {
             padding-left: 0.4rem !important;
             padding-right: 0.4rem !important;
@@ -428,7 +557,6 @@ st.markdown("""
 
     /* ── Accessibility: focus indicators ──────────────────────────────── */
     button:focus-visible,
-    [data-baseweb="tab"]:focus-visible,
     input:focus-visible,
     select:focus-visible,
     textarea:focus-visible {
@@ -486,8 +614,6 @@ if st.session_state.get("high_contrast"):
     .stMarkdown h2 { color: #8ab8e0 !important; border-bottom-color: #2a4a6a !important; }
     [data-testid="stSidebar"] { border-right: 2px solid #3a5a7a !important; }
     button[data-testid="stBaseButton-secondary"] { border-width: 2px !important; color: #b0d0f0 !important; }
-    button[data-baseweb="tab"] { border-width: 2px !important; color: #8aaace !important; }
-    button[data-baseweb="tab"][aria-selected="true"] { color: #e8f0ff !important; border-color: #7a9ae8 !important; }
     hr { background: linear-gradient(to right, transparent, #3a5a7a 20%, #3a5a7a 80%, transparent) !important; }
     </style>""", unsafe_allow_html=True)
 
@@ -628,6 +754,10 @@ def _load_user_data(username: str):
         for _ph, _st in _pps.items():
             _ppr_loaded[_ph] = [True] * _st["correct"] + [False] * (_st["attempted"] - _st["correct"])
         st.session_state["puzzle_phase_results"] = _ppr_loaded
+    # Batch-load course scores (avoids ~37 individual DB calls per render)
+    st.session_state["_course_scores_cache"] = db.get_all_course_scores(username)
+    # Batch-load concept mastery
+    st.session_state["_concept_mastery_cache"] = db.get_all_concept_mastery(username)
 
 
 # Load user data if we already have a username (e.g., after profile build in same session)
@@ -963,7 +1093,7 @@ def eval_graph_panel(moves: list[dict], current_idx: int) -> int | None:
             tickmode="array",
             tickvals=x_tickvals,
             ticktext=x_ticktext,
-            tickfont=dict(color="#888", size=11),
+            tickfont=dict(color="#5a7a8a", size=11),
             gridcolor="rgba(255,255,255,0.05)",
             showgrid=True,
             zeroline=False,
@@ -974,7 +1104,7 @@ def eval_graph_panel(moves: list[dict], current_idx: int) -> int | None:
             tickmode="array",
             tickvals=y_tickvals,
             ticktext=y_ticktext,
-            tickfont=dict(color="#888", size=11),
+            tickfont=dict(color="#5a7a8a", size=11),
             gridcolor="rgba(255,255,255,0.05)",
             showgrid=True,
             zeroline=True,
@@ -1085,11 +1215,11 @@ def game_overview_panel(moves: list[dict], headers: dict):
   <table style="width:100%;border-collapse:collapse;">
     <thead>
       <tr style="background:#161625;border-bottom:1px solid #1e1e2e;">
-        <th style="text-align:left;padding:10px 16px;color:#888;font-size:0.75em;
+        <th style="text-align:left;padding:10px 16px;color:#5a7a8a;font-size:0.75em;
                    font-weight:600;letter-spacing:0.06em;width:36%;">METRIC</th>
         <th style="text-align:center;padding:10px 16px;color:#e8e8e8;
                    font-weight:700;font-size:0.95em;width:32%;">⬜ {w_name}</th>
-        <th style="text-align:center;padding:10px 16px;color:#ccc;
+        <th style="text-align:center;padding:10px 16px;color:#a0bccc;
                    font-weight:700;font-size:0.95em;width:32%;">⬛ {b_name}</th>
       </tr>
     </thead>
@@ -1107,7 +1237,7 @@ def game_overview_panel(moves: list[dict], headers: dict):
     st.markdown(
         f'<div style="text-align:right;margin-bottom:4px;">'
         f'<span style="background:#1e1e2e;border:1px solid #2a2a3e;border-radius:4px;'
-        f'padding:2px 10px;font-size:0.8em;color:#ccc;font-weight:600;">{result}</span>'
+        f'padding:2px 10px;font-size:0.8em;color:#a0bccc;font-weight:600;">{result}</span>'
         f'</div>',
         unsafe_allow_html=True,
     )
@@ -1175,7 +1305,7 @@ def move_commentary_panel(move: dict, all_moves: list[dict], idx: int):
         f'background:#1a1a2e;border-radius:0 6px 6px 0;margin-bottom:6px;">'
         f'<span style="font-size:1.1em;font-weight:700;">{prefix}{move["move_san"]}</span>'
         f'&nbsp;&nbsp;{classification_badge(cls)}<br>'
-        f'<span style="color:#ccc;font-size:0.85em;">'
+        f'<span style="color:#a0bccc;font-size:0.85em;">'
         f'Eval: {move["eval_before"]:+.2f} → {move["eval_after"]:+.2f}</span>'
         f'{_extra_stats}'
         f'</div>',
@@ -1472,23 +1602,42 @@ def ai_review_panel(moves: list[dict], headers: dict):
         return
 
     review = st.session_state.game_review
+
+    # Build flat set of known concept names for linking
+    _all_concept_names = set()
+    for _cl_names in CONCEPT_LIBRARY.values():
+        _all_concept_names.update(_cl_names)
+
+    def _render_review_items(items: list, numbered: bool = False):
+        """Render review items with inline 'Study' buttons for matched concepts."""
+        for _ri_i, item in enumerate(items, 1):
+            prefix = f"**{_ri_i}.** " if numbered else "- "
+            st.markdown(f"{prefix}{item}")
+            # Scan for known concepts in the text
+            for _cn in _all_concept_names:
+                if _cn.lower() in item.lower():
+                    if st.button(
+                        f"Study: {_cn} →",
+                        key=f"review_study_{_cn}_{_ri_i}_{id(items)}",
+                    ):
+                        st.session_state.selected_concept = _cn
+                        st.session_state.navigate_to_coaching = True
+                        st.rerun()
+                    break  # one link per item
+
     t1, t2, t3, t4, t5 = st.tabs(
         ["Summary", "Key Moments", "Missed Tactics", "Positional Themes", "Tips to Learn"]
     )
     with t1:
         st.write(review.get("summary", "—"))
     with t2:
-        for item in review.get("key_moments", []):
-            st.markdown(f"- {item}")
+        _render_review_items(review.get("key_moments", []))
     with t3:
-        for item in review.get("missed_tactics", []):
-            st.markdown(f"- {item}")
+        _render_review_items(review.get("missed_tactics", []))
     with t4:
-        for item in review.get("positional_themes", []):
-            st.markdown(f"- {item}")
+        _render_review_items(review.get("positional_themes", []))
     with t5:
-        for i, tip in enumerate(review.get("tips_to_learn", []), 1):
-            st.markdown(f"**{i}.** {tip}")
+        _render_review_items(review.get("tips_to_learn", []), numbered=True)
 
 
 def _run_review(moves, headers):
@@ -1730,16 +1879,6 @@ def inject_puzzle_keyboard():
                 || active.isContentEditable)) return;
             var key = e.key.toLowerCase();
             if (key !== ' ' && key !== 'h' && key !== 's') return;
-            /* Only act when Puzzles tab is active */
-            var tabs = window.parent.document.querySelectorAll('[data-baseweb="tab"]');
-            var puzzlesActive = false;
-            for (var t = 0; t < tabs.length; t++) {
-                if (tabs[t].getAttribute('aria-selected') === 'true' &&
-                    tabs[t].innerText.indexOf('Puzzle') >= 0) {
-                    puzzlesActive = true; break;
-                }
-            }
-            if (!puzzlesActive) return;
             var btns = window.parent.document.querySelectorAll('button');
             for (var i = 0; i < btns.length; i++) {
                 var txt = btns[i].innerText.trim();
@@ -2005,7 +2144,7 @@ def render_game_review_tab():
 
         st.markdown(
             f'<h3 style="text-align:center;margin-bottom:2px;color:#cce0f4;">Analyzing game</h3>'
-            f'<p style="text-align:center;color:#ccc;margin-top:0;">'
+            f'<p style="text-align:center;color:#a0bccc;margin-top:0;">'
             f'⬜ {white} vs ⬛ {black} &nbsp;·&nbsp; {result}</p>',
             unsafe_allow_html=True,
         )
@@ -2099,7 +2238,7 @@ def render_game_review_tab():
     )
 
     # ── Key Moments Summary Card ──────────────────────────────────────────
-    _km_cls_colors = {"blunder": "#e53935", "mistake": "#fb8c00", "brilliant": "#b39ddb"}
+    _km_cls_colors = {"blunder": "#e57373", "mistake": "#fb8c00", "brilliant": "#b39ddb"}
     _key_moments = [
         (mi, m) for mi, m in enumerate(moves)
         if m.get("classification") in ("blunder", "mistake", "brilliant")
@@ -2115,7 +2254,7 @@ def render_game_review_tab():
             for _, m in _key_moments
         )
         st.markdown(
-            f'<div style="background:#0f1923;border:1px solid #1e2e3e;border-radius:10px;'
+            f'<div style="background:#111827;border:1px solid #1e2e3e;border-radius:10px;'
             f'padding:14px 16px;margin-bottom:14px;">'
             f'<div style="font-size:0.7em;color:#4a6080;font-weight:700;letter-spacing:0.1em;'
             f'text-transform:uppercase;margin-bottom:8px;">KEY MOMENTS IN THIS GAME</div>'
@@ -2216,10 +2355,10 @@ def render_game_review_tab():
             _ch_hide = _challenge_on and not st.session_state.get(f"_challenge_revealed_{idx}")
             st.markdown(
                 f'<div style="text-align:center;padding-top:6px;font-size:0.9em;">'
-                f'<span style="color:#888;">{idx+1}/{total}</span>'
+                f'<span style="color:#5a7a8a;">{idx+1}/{total}</span>'
                 f'&nbsp;·&nbsp;<b>{prefix}{cur["move_san"]}</b>&nbsp;'
                 + ("" if _ch_hide else classification_badge(cur["classification"]))
-                + ("" if _ch_hide else f'&nbsp;<span style="color:#ccc;">{cur["eval_after"]:+.2f}</span>')
+                + ("" if _ch_hide else f'&nbsp;<span style="color:#a0bccc;">{cur["eval_after"]:+.2f}</span>')
                 + '</div>',
                 unsafe_allow_html=True,
             )
@@ -2485,12 +2624,33 @@ def _get_concept_puzzle_counts() -> dict[str, int]:
     return counts
 
 
+def _mastery_badge(concept_name: str) -> str:
+    """Return a single mastery-level badge for a concept card.
+    Levels: New (grey), Seen (blue), Practicing (orange), Mastered (green)."""
+    _cm_all = st.session_state.get("_concept_mastery_cache")
+    if _cm_all is None:
+        _cm_all = db.get_all_concept_mastery(_current_user())
+        st.session_state["_concept_mastery_cache"] = _cm_all
+    _cm_data = _cm_all.get(concept_name)
+    has_lesson = f"concept_lesson_{concept_name.lower()}" in st.session_state
+    attempted = _cm_data["attempted"] if _cm_data else 0
+    pct = _cm_data["pct"] if _cm_data else 0
+
+    if attempted >= 3 and pct >= 80:
+        return '<span style="font-size:0.67em;color:#81c784;white-space:nowrap;">● Mastered</span>'
+    elif attempted >= 3:
+        return '<span style="font-size:0.67em;color:#ffb74d;white-space:nowrap;">◑ Practicing</span>'
+    elif has_lesson or attempted > 0:
+        return '<span style="font-size:0.67em;color:#4fc3f7;white-space:nowrap;">◐ Seen</span>'
+    else:
+        return '<span style="font-size:0.67em;color:#5a7a8a;white-space:nowrap;">○ New</span>'
+
+
 def _render_concept_card(concept: dict, puzzle_count: int = 0):
     name      = concept["name"]
     category  = concept["category"]
     examples  = concept["examples"]
     cat_color = CATEGORY_COLORS.get(category, "#78909c")
-    has_lesson = f"concept_lesson_{name.lower()}" in st.session_state
     is_theory  = name in _THEORY_ONLY_CONCEPTS
     is_focus   = name in (st.session_state.get("profile_data") or {}).get("priority_focus", [])
 
@@ -2510,23 +2670,10 @@ def _render_concept_card(concept: dict, puzzle_count: int = 0):
             'padding:1px 6px;">🎯 FOCUS</span>'
         )
 
-    # Independent status badges — lesson and puzzles shown separately
-    badge_parts = []
-    if is_theory:
-        badge_parts.append(
-            '<span style="font-size:0.67em;color:#7a9ab0;white-space:nowrap;">📖 Theory</span>'
-        )
-    if has_lesson:
-        badge_parts.append(
-            '<span style="font-size:0.67em;color:#6abf88;white-space:nowrap;">✓ Lesson</span>'
-        )
-    if not is_theory and puzzle_count > 0:
-        puz_label = f"{puzzle_count}+" if puzzle_count >= 9 else str(puzzle_count)
-        badge_parts.append(
-            f'<span style="font-size:0.67em;color:#4fc3f7;white-space:nowrap;">'
-            f'🧩 {puz_label} puzzle{"s" if puzzle_count != 1 else ""}</span>'
-        )
-    _cscore = db.get_course_score(_current_user(), name)
+    # Unified mastery badge + course score (from batch cache)
+    badge_parts = [_mastery_badge(name)]
+    _all_scores = st.session_state.get("_course_scores_cache") or {}
+    _cscore = _all_scores.get(name)
     if _cscore:
         _s, _t = _cscore["score"], _cscore["total"]
         _sc_color = "#81c784" if _s == _t else "#ffb74d" if _s / _t >= 0.6 else "#e57373"
@@ -2534,30 +2681,18 @@ def _render_concept_card(concept: dict, puzzle_count: int = 0):
             f'<span style="font-size:0.67em;color:{_sc_color};white-space:nowrap;">'
             f'Last: {_s}/{_t}</span>'
         )
-    # Concept mastery badge from puzzle performance
-    _cm_all = st.session_state.get("_concept_mastery_cache")
-    if _cm_all is None:
-        _cm_all = db.get_all_concept_mastery(_current_user())
-        st.session_state["_concept_mastery_cache"] = _cm_all
-    _cm_data = _cm_all.get(name)
-    if _cm_data and _cm_data["attempted"] >= 2:
-        _cm_pct = _cm_data["pct"]
-        _cm_color = "#81c784" if _cm_pct >= 80 else "#ffb74d" if _cm_pct >= 50 else "#e57373"
-        badge_parts.append(
-            f'<span style="font-size:0.67em;color:{_cm_color};white-space:nowrap;">'
-            f'Puzzles: {_cm_data["correct"]}/{_cm_data["attempted"]}</span>'
-        )
 
     badge_row = (
         '<div style="display:flex;gap:8px;margin-top:5px;flex-wrap:wrap;">'
         + "".join(badge_parts)
         + "</div>"
-    ) if badge_parts else '<div style="margin-top:5px;"></div>'
+    )
 
     card_border = "#3a4a2a" if is_focus else "#1e2e3e"
+    _card_top_accent = f'border-top:2px solid {cat_color}44;' if not is_focus else f'border-top:2px solid #5a8a3a;'
     st.markdown(
-        f'<div class="concept-card" style="background:#111827;border:1px solid {card_border};border-radius:10px;'
-        f'padding:14px 14px 8px;margin-bottom:4px;">'
+        f'<div class="concept-card" style="background:#111827;border:1px solid {card_border};{_card_top_accent}'
+        f'border-radius:10px;padding:14px 14px 8px;margin-bottom:4px;">'
         f'<div style="margin-bottom:6px;">'
         f'<span style="background:{cat_color}22;border:1px solid {cat_color}55;'
         f'color:{cat_color};font-size:0.65em;font-weight:700;border-radius:4px;'
@@ -2710,7 +2845,7 @@ def _render_lesson_loading_card(concept: str, regenerating: bool = False):
     """Prominent loading indicator shown while Claude generates a lesson."""
     action = "Rewriting" if regenerating else "Building"
     st.markdown(
-        f'<div style="background:#0d1525;border:1px solid #1e2e4a;border-radius:12px;'
+        f'<div style="background:#0d1525;border:1px solid #1e2e3e;border-radius:12px;'
         f'padding:48px 24px;text-align:center;margin:16px 0;min-height:120px;'
         f'display:flex;flex-direction:column;align-items:center;justify-content:center;">'
         f'<div class="coaching-pulse" style="width:48px;height:48px;border-radius:50%;'
@@ -2740,13 +2875,7 @@ import re as _re_mod
 
 def _render_time_management(summaries: list[dict]):
     """Render time management section: scatter chart + stat cards."""
-    st.markdown(
-        '<div style="font-size:0.7em;color:#4a6080;font-weight:700;'
-        'letter-spacing:0.1em;text-transform:uppercase;margin-bottom:14px;'
-        'margin-top:10px;padding-top:8px;border-top:1px solid #152030;">'
-        'TIME MANAGEMENT</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown(_section_header("Time Management", "#ffb74d"), unsafe_allow_html=True)
     # Gather all move_times across summaries
     all_mt: list[dict] = []
     has_any_clock = False
@@ -2796,19 +2925,19 @@ def _render_time_management(summaries: list[dict]):
     tt_pct = round(100 * tt_count / len(valid_mt)) if valid_mt else 0
     st.markdown(
         f'<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:8px;">'
-        f'<div style="background:#0f1923;border:1px solid #1e2e3e;border-radius:8px;'
+        f'<div style="background:#111827;border:1px solid #1e2e3e;border-radius:8px;'
         f'padding:8px 16px;text-align:center;">'
         f'<div style="font-size:0.95em;font-weight:700;color:#cce0f4;">{avg_time}s</div>'
         f'<div style="font-size:0.62em;color:#7a9ab0;">AVG MOVE TIME</div></div>'
-        f'<div style="background:#0f1923;border:1px solid #1e2e3e;border-radius:8px;'
+        f'<div style="background:#111827;border:1px solid #1e2e3e;border-radius:8px;'
         f'padding:8px 16px;text-align:center;">'
         f'<div style="font-size:0.95em;font-weight:700;color:#e57373;">{tt_pct}%</div>'
         f'<div style="font-size:0.62em;color:#7a9ab0;">TIME TROUBLE</div></div>'
-        f'<div style="background:#0f1923;border:1px solid #1e2e3e;border-radius:8px;'
+        f'<div style="background:#111827;border:1px solid #1e2e3e;border-radius:8px;'
         f'padding:8px 16px;text-align:center;">'
         f'<div style="font-size:0.95em;font-weight:700;color:#81c784;">{fastest}s</div>'
         f'<div style="font-size:0.62em;color:#7a9ab0;">FASTEST</div></div>'
-        f'<div style="background:#0f1923;border:1px solid #1e2e3e;border-radius:8px;'
+        f'<div style="background:#111827;border:1px solid #1e2e3e;border-radius:8px;'
         f'padding:8px 16px;text-align:center;">'
         f'<div style="font-size:0.95em;font-weight:700;color:#ffb74d;">{slowest}s</div>'
         f'<div style="font-size:0.62em;color:#7a9ab0;">SLOWEST</div></div>'
@@ -2817,15 +2946,162 @@ def _render_time_management(summaries: list[dict]):
     )
 
 
-def _render_comparative_analytics(all_sums: list[dict], full_skills: dict[str, int], skill_cats: list[str]):
-    """Render filters for time control/color/result with overlaid radar chart."""
+def _render_time_pressure_analysis(summaries: list[dict]):
+    """Render time pressure analysis: accuracy by remaining clock buckets."""
+    clock_games = [s for s in summaries if s.get("has_clock")]
+    if not clock_games:
+        return
+    total_games = len(summaries)
+    n_clock = len(clock_games)
+
+    all_mt: list[dict] = []
+    total_tt_moves = 0
+    avg_move_times: list[float] = []
+    for s in clock_games:
+        total_tt_moves += s.get("time_trouble_moves", 0)
+        if s.get("avg_move_time") is not None:
+            avg_move_times.append(s["avg_move_time"])
+        if s.get("move_times"):
+            all_mt.extend(s["move_times"])
+
+    valid_mt = [mt for mt in all_mt if mt.get("clock_seconds") is not None]
+    if not valid_mt:
+        return
+
     st.markdown(
-        '<div style="font-size:0.7em;color:#4a6080;font-weight:700;'
-        'letter-spacing:0.1em;text-transform:uppercase;margin-bottom:14px;'
-        'margin-top:10px;padding-top:8px;border-top:1px solid #152030;">'
-        'COMPARE YOUR PLAY</div>',
+        _section_header("Time Pressure", accent="#e57373", icon="\u23f1"),
         unsafe_allow_html=True,
     )
+
+    # Summary row
+    avg_mt_str = (
+        f"{round(sum(avg_move_times) / len(avg_move_times), 1)}s"
+        if avg_move_times else "N/A"
+    )
+    st.markdown(
+        f'<div style="background:#111827;border:1px solid #1e2e3e;border-radius:10px;'
+        f'padding:12px 18px;margin-bottom:14px;display:flex;gap:20px;flex-wrap:wrap;'
+        f'align-items:center;justify-content:center;">'
+        f'<span style="font-size:0.82em;color:#a0bccc;">'
+        f'<b style="color:#cce0f4;">{n_clock}</b> of '
+        f'<b style="color:#cce0f4;">{total_games}</b> games with clock data</span>'
+        f'<span style="color:#1e2e3e;">|</span>'
+        f'<span style="font-size:0.82em;color:#a0bccc;">'
+        f'Avg move time: <b style="color:#cce0f4;">{avg_mt_str}</b></span>'
+        f'<span style="color:#1e2e3e;">|</span>'
+        f'<span style="font-size:0.82em;color:#a0bccc;">'
+        f'Time trouble moves: <b style="color:#e57373;">{total_tt_moves}</b></span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Bucket moves by remaining clock time
+    GOOD_CLS = {"good", "best", "book", "brilliant"}
+    buckets = [
+        (">5 min", lambda c: c > 300),
+        ("2\u20135 min", lambda c: 120 < c <= 300),
+        ("1\u20132 min", lambda c: 60 < c <= 120),
+        ("30s\u20131 min", lambda c: 30 < c <= 60),
+        ("<30s", lambda c: c <= 30),
+    ]
+    bucket_data: list[tuple[str, int, int]] = []
+    for label, test_fn in buckets:
+        moves_in = [mt for mt in valid_mt if test_fn(mt["clock_seconds"])]
+        if not moves_in:
+            bucket_data.append((label, 0, 0))
+            continue
+        good = sum(
+            1 for mt in moves_in
+            if mt.get("classification", "").lower() in GOOD_CLS
+        )
+        bucket_data.append((label, good, len(moves_in)))
+
+    # Build HTML bar chart
+    bars_html = ""
+    bucket_accs: dict[str, float] = {}
+    for label, good, total in bucket_data:
+        if total == 0:
+            acc = 0.0
+            acc_str = "\u2014"
+            bar_color = "#1e2e3e"
+            count_str = "0 moves"
+        else:
+            acc = round(100 * good / total, 1)
+            acc_str = f"{acc}%"
+            bar_color = (
+                "#81c784" if acc >= 70
+                else "#ffb74d" if acc >= 50
+                else "#e57373"
+            )
+            count_str = f"{total} moves"
+        bucket_accs[label] = acc
+        bar_width = max(acc, 2) if total > 0 else 0
+        bars_html += (
+            f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">'
+            f'<span style="min-width:72px;font-size:0.78em;color:#a0bccc;'
+            f'text-align:right;font-weight:600;">{label}</span>'
+            f'<div style="flex:1;height:22px;background:#0d1117;'
+            f'border:1px solid #1e2e3e;border-radius:4px;overflow:hidden;'
+            f'position:relative;">'
+            f'<div style="width:{bar_width}%;height:100%;background:{bar_color};'
+            f'border-radius:3px;transition:width 0.3s;"></div>'
+            f'<span style="position:absolute;right:8px;top:50%;'
+            f'transform:translateY(-50%);font-size:0.72em;color:#cce0f4;'
+            f'font-weight:700;">{acc_str}</span>'
+            f'</div>'
+            f'<span style="min-width:60px;font-size:0.68em;'
+            f'color:#7a9ab0;">{count_str}</span>'
+            f'</div>'
+        )
+
+    st.markdown(
+        f'<div style="background:#111827;border:1px solid #1e2e3e;'
+        f'border-radius:10px;padding:16px 18px;margin-bottom:12px;">'
+        f'<div style="font-size:0.75em;color:#7a9ab0;margin-bottom:10px;'
+        f'font-weight:600;letter-spacing:0.04em;text-transform:uppercase;">'
+        f'Accuracy by Remaining Clock Time</div>'
+        f'{bars_html}'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Time Trouble Insight card
+    high_acc = bucket_accs.get(">5 min", 0)
+    low_acc = bucket_accs.get("<30s", 0)
+    has_high = any(bd[2] > 0 for bd in bucket_data if bd[0] == ">5 min")
+    has_low = any(bd[2] > 0 for bd in bucket_data if bd[0] == "<30s")
+    if has_high and has_low:
+        drop = round(high_acc - low_acc, 1)
+        if drop > 0:
+            insight_text = (
+                f"Your accuracy drops "
+                f"<b style='color:#e57373;'>{drop}%</b> "
+                f"when you have less than 30 seconds "
+                f"(<b style='color:#cce0f4;'>{high_acc}%</b> with 5+ min "
+                f"\u2192 <b style='color:#cce0f4;'>{low_acc}%</b> under 30s)"
+            )
+        else:
+            insight_text = (
+                f"You maintain accuracy under time pressure \u2014 "
+                f"<b style='color:#81c784;'>{low_acc}%</b> with &lt;30s vs "
+                f"<b style='color:#cce0f4;'>{high_acc}%</b> with 5+ min"
+            )
+        st.markdown(
+            f'<div style="background:linear-gradient(135deg,#1a1020,#111827);'
+            f'border:1px solid #3a2040;border-radius:10px;padding:14px 18px;">'
+            f'<div style="font-size:0.72em;color:#e57373;font-weight:700;'
+            f'letter-spacing:0.05em;text-transform:uppercase;margin-bottom:6px;">'
+            f'\u23f1 Time Trouble Insight</div>'
+            f'<div style="font-size:0.85em;color:#a0bccc;line-height:1.5;">'
+            f'{insight_text}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+
+def _render_comparative_analytics(all_sums: list[dict], full_skills: dict[str, int], skill_cats: list[str]):
+    """Render filters for time control/color/result with overlaid radar chart."""
+    st.markdown(_section_header("Compare Your Play", "#4fc3f7"), unsafe_allow_html=True)
     _ca_c1, _ca_c2, _ca_c3 = st.columns(3)
     with _ca_c1:
         _ca_tc = st.selectbox("Time Control", ["All", "Bullet", "Blitz", "Rapid", "Classical"],
@@ -2897,15 +3173,15 @@ def _render_comparative_analytics(all_sums: list[dict], full_skills: dict[str, i
         _ca_avg_acc = round(sum(_ca_acc_vals) / len(_ca_acc_vals), 1) if _ca_acc_vals else 0
         st.markdown(
             f'<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:8px;">'
-            f'<div style="background:#0f1923;border:1px solid #1e2e3e;border-radius:8px;'
+            f'<div style="background:#111827;border:1px solid #1e2e3e;border-radius:8px;'
             f'padding:8px 16px;text-align:center;">'
             f'<div style="font-size:0.95em;font-weight:700;color:#cce0f4;">{_ca_wins}W {_ca_losses}L {_ca_draws}D</div>'
             f'<div style="font-size:0.62em;color:#7a9ab0;">RECORD</div></div>'
-            f'<div style="background:#0f1923;border:1px solid #1e2e3e;border-radius:8px;'
+            f'<div style="background:#111827;border:1px solid #1e2e3e;border-radius:8px;'
             f'padding:8px 16px;text-align:center;">'
             f'<div style="font-size:0.95em;font-weight:700;color:#4fc3f7;">{_ca_avg_acc}%</div>'
             f'<div style="font-size:0.62em;color:#7a9ab0;">ACCURACY</div></div>'
-            f'<div style="background:#0f1923;border:1px solid #1e2e3e;border-radius:8px;'
+            f'<div style="background:#111827;border:1px solid #1e2e3e;border-radius:8px;'
             f'padding:8px 16px;text-align:center;">'
             f'<div style="font-size:0.95em;font-weight:700;color:#a0bccc;">{len(filtered)}</div>'
             f'<div style="font-size:0.62em;color:#7a9ab0;">GAMES</div></div>'
@@ -2985,7 +3261,7 @@ def _render_lesson_chapter_nav(lesson_text: str) -> str:
         for _, slug, safe_h in slugs
     )
     toc = (
-        f'<div style="margin-bottom:16px;padding:10px 0;border-bottom:1px solid #1a2e48;">'
+        f'<div style="margin-bottom:16px;padding:10px 0;border-bottom:1px solid #1e2e3e;">'
         f'{pills}</div>'
     )
     return toc + modified
@@ -3030,7 +3306,7 @@ def _render_concept_detail(concept: str, *, show_header: bool = True):
         _ov_parts.append(f"~{_ov_mins} min read")
     if _ov_parts:
         st.markdown(
-            f'<div style="background:#0f1923;border:1px solid #1e2e3e;border-radius:8px;'
+            f'<div style="background:#111827;border:1px solid #1e2e3e;border-radius:8px;'
             f'padding:10px 14px;margin-bottom:14px;font-size:0.82em;color:#a0bccc;">'
             f'{" \u00b7 ".join(_ov_parts)}</div>',
             unsafe_allow_html=True,
@@ -3059,7 +3335,7 @@ def _render_concept_detail(concept: str, *, show_header: bool = True):
             unsafe_allow_html=True,
         )
 
-    st.markdown("---")
+    st.markdown(_section_header("Lesson", "#5a7ac8", icon="📖"), unsafe_allow_html=True)
 
     # Lesson content — pull from DB if not already in session, then auto-generate
     lesson_key = f"concept_lesson_{concept.lower()}"
@@ -3084,6 +3360,7 @@ def _render_concept_detail(concept: str, *, show_header: bool = True):
             )
             _count_lesson_gen()
             db.save_lesson(_current_user(), concept, st.session_state[lesson_key])
+            db.add_review_item(_current_user(), concept)
             _check_achievement("first_lesson")
             _increment_daily_goal("lessons")
             st.session_state._session_lessons = st.session_state.get("_session_lessons", 0) + 1
@@ -3105,6 +3382,7 @@ def _render_concept_detail(concept: str, *, show_header: bool = True):
             with _lc:
                 if _takeaway:
                     _render_takeaway_card(_takeaway)
+                    _render_try_this(concept)
                 st.markdown(_lesson_text, unsafe_allow_html=True)
                 _render_lesson_diagrams(_lesson_diagrams, concept)
 
@@ -3121,11 +3399,12 @@ def _render_concept_detail(concept: str, *, show_header: bool = True):
         )
         _count_lesson_gen()
         db.save_lesson(_current_user(), concept, st.session_state[lesson_key])
+        db.add_review_item(_current_user(), concept)
         st.rerun()
 
     if concept in _THEORY_ONLY_CONCEPTS:
         st.markdown(
-            '<div style="background:#0d1525;border:1px solid #1e2e4a;border-left:3px solid #5a7ac8;'
+            '<div style="background:#0d1525;border:1px solid #1e2e3e;border-left:3px solid #5a7ac8;'
             'border-radius:8px;padding:12px 16px;font-size:0.85em;color:#a0bccc;">'
             '📖 <strong style="color:#cce0f4;">Theory concept</strong> — this pattern is best '
             'recognised through study rather than static positions. Interactive puzzles are not '
@@ -3318,6 +3597,7 @@ def render_course_view():
                 )
                 _count_lesson_gen()
                 db.save_lesson(_current_user(), concept, st.session_state[lesson_key])
+                db.add_review_item(_current_user(), concept)
 
         if lesson_key in st.session_state:
             with lesson_area.container():
@@ -3380,8 +3660,9 @@ def render_course_view():
         n_correct = sum(1 for r in results if r)
         pct = round(100 * n_correct / total) if total else 0
 
-        # Persist course score
+        # Persist course score + invalidate cache
         db.save_course_score(_current_user(), concept, n_correct, total)
+        st.session_state.pop("_course_scores_cache", None)
         if n_correct == total and total >= 5:
             _check_achievement("perfect_course")
 
@@ -3644,6 +3925,7 @@ def _bulk_generate_lessons(concepts: list[dict]):
         )
         _count_lesson_gen()
         db.save_lesson(_current_user(), c["name"], lesson)
+        db.add_review_item(_current_user(), c["name"])
         st.session_state[f"concept_lesson_{c['name'].lower()}"] = lesson
 
     progress.progress(1.0, text="All lessons ready!")
@@ -3655,35 +3937,27 @@ def _render_concept_library():
     st.markdown("""
 <style>
 .concept-card {
-    height: 118px;
+    height: 110px;
     overflow: hidden;
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
-    gap: 6px;
-    transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+    gap: 5px;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
     cursor: pointer;
 }
 .concept-card:hover {
-    transform: scale(1.04);
     border-color: #3a6a96 !important;
-    box-shadow: 0 6px 22px rgba(0,0,0,0.5);
+    box-shadow: 0 3px 12px rgba(0,0,0,0.35);
     position: relative;
     z-index: 5;
 }
 </style>
 """, unsafe_allow_html=True)
 
-    st.markdown(
-        '<p style="color:#7a9ab0;font-size:0.82em;margin:0 0 16px;">'
-        'Deep-dive into specific chess concepts with AI-generated lessons and practice '
-        'positions from your games. For a structured step-by-step path, '
-        'switch to <strong style="color:#a0bccc;">Training</strong>.</p>',
-        unsafe_allow_html=True,
-    )
-
     all_concepts  = _coaching_concept_list()
     game_concepts = st.session_state.get("coaching_concepts", {})
+    _profile_data = st.session_state.get("profile_data") or {}
     n_lessons     = sum(
         1 for c in all_concepts
         if f"concept_lesson_{c['name'].lower()}" in st.session_state
@@ -3693,89 +3967,83 @@ def _render_concept_library():
     puzzle_counts = _get_concept_puzzle_counts()
     n_with_puzzles = sum(1 for c in all_concepts if puzzle_counts.get(c["name"], 0) > 0)
 
-    parts = [f"{len(all_concepts)} concepts"]
-    if game_concepts:
-        parts.append(f"{len(game_concepts)} from your games")
-    if n_lessons:
-        parts.append(f"{n_lessons} lesson{'s' if n_lessons != 1 else ''} ready")
-    if n_with_puzzles:
-        parts.append(f"{n_with_puzzles} with practice puzzles")
-    st.markdown(
-        f'<p style="text-align:center;color:#a0bccc;margin-bottom:18px;font-size:0.88em;">'
-        f'{" · ".join(parts)}</p>',
-        unsafe_allow_html=True,
-    )
+    # Compact stats + bulk gen in a single row
+    _stat_col, _bulk_col = st.columns([3, 1])
+    with _stat_col:
+        parts = [f"{len(all_concepts)} concepts"]
+        if game_concepts:
+            parts.append(f"{len(game_concepts)} from your games")
+        if n_lessons:
+            parts.append(f"{n_lessons} ready")
+        st.markdown(
+            f'<div style="color:#5a8ab0;font-size:0.8em;padding:6px 0;">'
+            f'{" · ".join(parts)}</div>',
+            unsafe_allow_html=True,
+        )
 
-    # Bulk lesson generation buttons
-    _has_profile = bool(st.session_state.get("profile_data"))
-    _missing_any = n_lessons < len(all_concepts)
+    with _bulk_col:
+        _has_profile = bool(_profile_data)
+        _missing_any = n_lessons < len(all_concepts)
+        if _missing_any:
+            with st.popover("Generate Lessons", use_container_width=True):
+                _gen_exhausted = _lesson_gen_remaining() <= 0
+                if _gen_exhausted:
+                    st.caption(f"Daily limit reached ({_DAILY_LESSON_CAP}/day).")
+                else:
+                    if _has_profile:
+                        _focus = set(_profile_data.get("priority_focus", []))
+                        _profile_concepts = [
+                            c for c in all_concepts
+                            if c["name"] in _focus or c.get("examples")
+                        ]
+                        _profile_missing = [
+                            c for c in _profile_concepts
+                            if f"concept_lesson_{c['name'].lower()}" not in st.session_state
+                        ]
+                        if _profile_missing:
+                            if st.button(
+                                f"Prepare My Courses ({len(_profile_missing)})",
+                                key="bulk_gen_profile",
+                                use_container_width=True,
+                                type="primary",
+                            ):
+                                _bulk_generate_lessons(_profile_missing)
 
-    if _missing_any:
-        _gen_exhausted = _lesson_gen_remaining() <= 0
-        _bcols = st.columns([1, 1, 1] if _has_profile else [1, 1])
-        col_idx = 0
-        if _has_profile:
-            _focus = set((st.session_state.get("profile_data") or {}).get("priority_focus", []))
-            _profile_concepts = [
-                c for c in all_concepts
-                if c["name"] in _focus or c.get("examples")
-            ]
-            _profile_missing = [
-                c for c in _profile_concepts
-                if f"concept_lesson_{c['name'].lower()}" not in st.session_state
-            ]
-            if _profile_missing:
-                with _bcols[col_idx]:
-                    if st.button(
-                        f"Prepare My Courses ({len(_profile_missing)})",
-                        key="bulk_gen_profile",
-                        use_container_width=True,
-                        type="primary",
-                        disabled=_gen_exhausted,
-                    ):
-                        _bulk_generate_lessons(_profile_missing)
-            col_idx += 1
+                    _all_missing = [
+                        c for c in all_concepts
+                        if f"concept_lesson_{c['name'].lower()}" not in st.session_state
+                    ]
+                    if _all_missing:
+                        if st.button(
+                            f"Generate All ({len(_all_missing)})",
+                            key="bulk_gen_all",
+                            use_container_width=True,
+                        ):
+                            _bulk_generate_lessons(_all_missing)
 
-        _all_missing = [
-            c for c in all_concepts
-            if f"concept_lesson_{c['name'].lower()}" not in st.session_state
-        ]
-        if _all_missing:
-            with _bcols[col_idx]:
-                if st.button(
-                    f"Generate All Lessons ({len(_all_missing)})",
-                    key="bulk_gen_all",
-                    use_container_width=True,
-                    disabled=_gen_exhausted,
-                ):
-                    _bulk_generate_lessons(_all_missing)
-        if _gen_exhausted:
-            st.caption(f"Daily limit reached ({_DAILY_LESSON_CAP}/day). Resets tomorrow.")
-
-    # Category filter buttons
+    # Category filter — compact selectbox instead of many buttons
     cats = ["All"] + list(CONCEPT_LIBRARY.keys())
     if any(c["category"] == "From Your Games" for c in all_concepts):
         cats.append("From Your Games")
     active_cat = st.session_state.get("coaching_category", "All")
-    filter_cols = st.columns(len(cats))
-    for i, cat in enumerate(cats):
-        with filter_cols[i]:
-            if st.button(
-                cat, key=f"cat_{cat}",
-                use_container_width=True,
-                type="primary" if cat == active_cat else "secondary",
-            ):
-                st.session_state.coaching_category = cat
-                st.rerun()
+    _new_cat = st.selectbox(
+        "Category", cats,
+        index=cats.index(active_cat) if active_cat in cats else 0,
+        key="_coaching_cat_select",
+        label_visibility="collapsed",
+    )
+    if _new_cat != active_cat:
+        st.session_state.coaching_category = _new_cat
+        st.rerun()
 
-    st.markdown('<div style="height:14px;"></div>', unsafe_allow_html=True)
+    st.markdown('<div style="height:6px;"></div>', unsafe_allow_html=True)
 
     visible = all_concepts if active_cat == "All" else [
         c for c in all_concepts if c["category"] == active_cat
     ]
 
     # Float focus-area concepts to the top
-    _focus_set = set((st.session_state.get("profile_data") or {}).get("priority_focus", []))
+    _focus_set = set(_profile_data.get("priority_focus", []))
     if _focus_set:
         visible = sorted(visible, key=lambda c: c["name"] not in _focus_set)
 
@@ -4244,7 +4512,7 @@ def _render_ttr_stages():
     rec_modules = get_recommended_modules(profile_data, profile_summaries, rating)
     if rec_modules:
         st.markdown(
-            '<div style="background:#0d1525;border:1px solid #1a3a5a;border-radius:10px;'
+            '<div style="background:#0d1525;border:1px solid #1e2e3e;border-radius:10px;'
             'padding:16px 20px;margin-bottom:20px;">'
             '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">'
             '<span style="font-size:1.05em;">🎯</span>'
@@ -4459,7 +4727,7 @@ def _render_ttr_walkthrough(walkthrough: dict, step: int):
     annotations = walkthrough.get("annotations", [])
     if step < len(annotations):
         st.markdown(
-            f'<div style="background:#0d1525;border:1px solid #1e2e4a;border-radius:10px;'
+            f'<div style="background:#0d1525;border:1px solid #1e2e3e;border-radius:10px;'
             f'padding:14px 18px;margin-bottom:12px;">'
             f'<p style="color:#c0d0e0;font-size:0.92em;line-height:1.6;margin:0;">'
             f'{annotations[step]}</p></div>',
@@ -4539,6 +4807,7 @@ def _render_ttr_module_flow():
                 concept, rating_band,
             )
             db.save_lesson(_current_user(), db_key, st.session_state[lesson_key])
+            db.add_review_item(_current_user(), db_key)
 
         with lesson_area.container():
             _lt, _, _ = parse_lesson_diagrams(st.session_state[lesson_key])
@@ -5088,7 +5357,7 @@ _ENDGAME_POSITIONS = [
     },
 ]
 
-_ET_DIFF_COLORS = {"Beginner": "#4caf50", "Intermediate": "#ff9800", "Advanced": "#f44336"}
+_ET_DIFF_COLORS = {"Beginner": "#4caf50", "Intermediate": "#ff9800", "Advanced": "#e57373"}
 
 
 def render_endgame_trainer():
@@ -5529,7 +5798,173 @@ def _process_endgame_move(move_text: str):
     st.rerun()
 
 
+def _render_lichess_puzzles():
+    """Render Lichess database puzzle mode — themed puzzles from curated collections."""
+    _src_cols = st.columns([2, 1, 1])
+    with _src_cols[0]:
+        _lp_theme = st.selectbox(
+            "Puzzle Theme",
+            list(chess_data.PUZZLE_THEMES.keys()),
+            key="_lichess_puzzle_theme",
+        )
+    with _src_cols[1]:
+        _lp_diff = st.radio(
+            "Difficulty", ["Easier", "Matched", "Harder"],
+            index=1, horizontal=True, key="_lp_difficulty",
+            label_visibility="collapsed",
+        )
+    with _src_cols[2]:
+        if st.button("New Puzzles", key="lp_refresh", use_container_width=True):
+            st.session_state.pop("_lp_puzzles", None)
+            st.session_state.pop("_lp_idx", None)
+            st.rerun()
+
+    # Compute target rating from user's Tactics skill score
+    _lp_target = 0
+    _profile = st.session_state.get("profile_data")
+    _sums = st.session_state.get("profile_summaries", [])
+    if _profile and _sums:
+        _skills = compute_skill_scores(_sums)
+        _tactics_score = _skills.get("Tactics", 50)
+        _lp_target = 600 + (_tactics_score * 12)  # maps 0-100 → 600-1800
+        _diff_offset = {"Easier": -300, "Matched": 0, "Harder": 300}
+        _lp_target += _diff_offset.get(_lp_diff, 0)
+        _lp_target = max(600, _lp_target)
+
+    # Fetch puzzles for the theme
+    _lp_cache_key = f"{_lp_theme}_{_lp_diff}"
+    if "_lp_puzzles" not in st.session_state or \
+       st.session_state.get("_lp_theme_prev") != _lp_cache_key:
+        with st.spinner("Fetching puzzles..."):
+            puzzles = chess_data.get_themed_puzzles(_lp_theme, count=10, target_rating=_lp_target)
+        st.session_state["_lp_puzzles"] = puzzles
+        st.session_state["_lp_theme_prev"] = _lp_cache_key
+        st.session_state["_lp_idx"] = 0
+        st.session_state.pop("_lp_revealed", None)
+
+    puzzles = st.session_state.get("_lp_puzzles", [])
+    if not puzzles:
+        _empty_state("🔌", "Couldn't Load Puzzles",
+                     f"Could not fetch puzzles for {_lp_theme}. Try another theme or check your connection.")
+        return
+
+    idx = st.session_state.get("_lp_idx", 0)
+    if idx >= len(puzzles):
+        st.success("All puzzles in this set complete! Click 'New Puzzles' for more.")
+        return
+
+    puzzle_data = puzzles[idx]
+    game_data = puzzle_data.get("game", {})
+    puzzle_info = puzzle_data.get("puzzle", {})
+
+    # Parse the puzzle
+    pgn_text = game_data.get("pgn", "")
+    initial_ply = puzzle_info.get("initialPly", 0)
+    solution = puzzle_info.get("solution", [])
+    rating = puzzle_info.get("rating", "?")
+    themes = puzzle_info.get("themes", [])
+
+    # Build board position from PGN up to initialPly
+    import io as _io
+    try:
+        _pgn_game = chess.pgn.read_game(_io.StringIO(pgn_text))
+        board = _pgn_game.board()
+        moves = list(_pgn_game.mainline_moves())
+        for m in moves[:initial_ply]:
+            board.push(m)
+    except Exception:
+        st.error("Failed to parse puzzle position.")
+        return
+
+    fen = board.fen()
+    to_move = "White" if board.turn == chess.WHITE else "Black"
+
+    # Display
+    _lp_range_html = ""
+    if _lp_target > 0:
+        _lp_lo, _lp_hi = _lp_target - 300, _lp_target + 300
+        _lp_range_html = f' · Your range: {_lp_lo}-{_lp_hi}'
+    st.markdown(
+        f'<div style="display:flex;justify-content:space-between;align-items:center;'
+        f'margin-bottom:8px;">'
+        f'<span style="color:#e2c97e;font-weight:700;">Puzzle {idx + 1}/{len(puzzles)}</span>'
+        f'<span style="color:#5a8ab0;font-size:0.85em;">Rating: {rating}{_lp_range_html}</span></div>',
+        unsafe_allow_html=True,
+    )
+
+    # Render board
+    _lp_board = chess.Board(fen)
+    _lp_orientation = board.turn
+    _svg = chess.svg.board(
+        _lp_board, orientation=_lp_orientation, size=360,
+        style="background-color: transparent;",
+    )
+    st.markdown(
+        f'<div style="display:flex;justify-content:center;">{_svg}</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f'<div style="text-align:center;color:#b0c8d8;font-size:0.9em;margin:8px 0;">'
+        f'**{to_move} to move** — find the best move!</div>',
+        unsafe_allow_html=True,
+    )
+
+    if themes:
+        _theme_str = ", ".join(t.replace("_", " ").title() for t in themes[:4])
+        st.caption(f"Themes: {_theme_str}")
+
+    # Reveal solution
+    if not st.session_state.get("_lp_revealed"):
+        if st.button("Show Solution", key="lp_show_sol", use_container_width=True):
+            st.session_state["_lp_revealed"] = True
+            st.rerun()
+    else:
+        # Show solution moves
+        sol_board = chess.Board(fen)
+        sol_lines = []
+        for i, uci in enumerate(solution):
+            try:
+                move = chess.Move.from_uci(uci)
+                san = sol_board.san(move)
+                sol_board.push(move)
+                prefix = f"{sol_board.fullmove_number}." if (i % 2 == 0 and board.turn == chess.WHITE) or \
+                         (i % 2 == 0 and board.turn == chess.BLACK) else ""
+                if i % 2 == 0 and board.turn == chess.BLACK:
+                    prefix = f"{sol_board.fullmove_number - 1}..."
+                sol_lines.append(f"**{san}**" if i == 0 else san)
+            except Exception:
+                sol_lines.append(uci)
+
+        st.markdown(
+            f'<div style="background:#152a40;border-radius:8px;padding:14px;margin:8px 0;">'
+            f'<div style="color:#81c784;font-weight:600;margin-bottom:6px;">Solution:</div>'
+            f'<div style="color:#b0c8d8;font-size:1.05em;">{" ".join(sol_lines)}</div></div>',
+            unsafe_allow_html=True,
+        )
+
+        if st.button("Next Puzzle →", key="lp_next", use_container_width=True):
+            st.session_state["_lp_idx"] = idx + 1
+            st.session_state.pop("_lp_revealed", None)
+            username = _current_user()
+            if username:
+                _increment_daily_goal("puzzles")
+            st.rerun()
+
+
 def render_puzzles_tab():
+    # ── Source toggle ─────────────────────────────────────────────────────────
+    _puz_source = st.radio(
+        "Puzzle Source",
+        ["My Games", "Lichess Database"],
+        horizontal=True,
+        key="_puzzle_source",
+        label_visibility="collapsed",
+    )
+
+    if _puz_source == "Lichess Database":
+        _render_lichess_puzzles()
+        return
+
     # ── Require profile summaries ─────────────────────────────────────────────
     if "profile_summaries" not in st.session_state:
         username = st.session_state.get("profile_username", "")
@@ -5539,10 +5974,9 @@ def render_puzzles_tab():
             st.session_state.profile_summaries = summaries
 
     if not st.session_state.get("profile_summaries"):
-        st.info("Build your profile from the **Dashboard** to unlock puzzles from your games.")
-        if st.button("Go to Dashboard", key="puz_to_dash"):
-            st.session_state.navigate_to_dashboard = True
-            st.rerun()
+        _empty_state("🧩", "Puzzles From Your Games",
+                     "Build your profile from the Dashboard to unlock puzzles tailored to your play.",
+                     action_label="Go to Dashboard", action_nav="navigate_to_dashboard")
         return
 
     # ── Hidden trigger buttons (clicked by iframe JS, hidden via JS below) ────
@@ -5556,11 +5990,8 @@ def render_puzzles_tab():
 
     queue = st.session_state.puzzle_queue
     if not queue:
-        st.markdown(
-            '<div style="text-align:center;padding:32px 0;color:#90aec4;">'
-            'No puzzles found. Build your profile with more games to generate puzzles.</div>',
-            unsafe_allow_html=True,
-        )
+        _empty_state("♟", "No Puzzles Yet",
+                     "Build your profile with more games to generate puzzles from your own play.")
         return
 
     # ── Concept filter dropdown ────────────────────────────────────────────
@@ -5619,21 +6050,26 @@ def render_puzzles_tab():
         'display:inline-flex;flex-direction:column;align-items:center;'
         'padding:6px 16px;'
     )
+    _pz_acc_color = "#81c784" if _pz_acc >= 60 else "#ffb74d" if _pz_acc >= 40 else "#e57373"
+    _pz_divider = '<div style="width:1px;background:#1e2e3e;margin:6px 0;"></div>'
     st.markdown(
-        f'<div style="display:flex;justify-content:center;gap:4px;'
-        f'background:#0f1923;border:1px solid #1e2e3e;border-radius:10px;'
+        f'<div class="stat-card" style="display:flex;justify-content:center;gap:0;'
+        f'background:#111827;border:1px solid #1e2e3e;border-radius:10px;'
         f'padding:8px 0;margin-bottom:12px;">'
         f'<div style="{_pz_stat_style}">'
-        f'<span style="font-size:1.2em;font-weight:800;color:#cce0f4;">{_pz_solved}</span>'
+        f'<span style="font-size:1.2em;font-weight:800;color:#cce0f4;text-shadow:0 0 8px #cce0f422;">{_pz_solved}</span>'
         f'<span style="font-size:0.62em;color:#5a7a8a;font-weight:700;letter-spacing:0.06em;">SOLVED</span></div>'
+        f'{_pz_divider}'
         f'<div style="{_pz_stat_style}">'
-        f'<span style="font-size:1.2em;font-weight:800;color:{"#81c784" if _pz_acc >= 60 else "#ffb74d" if _pz_acc >= 40 else "#e57373"};">{_pz_acc}%</span>'
+        f'<span style="font-size:1.2em;font-weight:800;color:{_pz_acc_color};text-shadow:0 0 8px {_pz_acc_color}33;">{_pz_acc}%</span>'
         f'<span style="font-size:0.62em;color:#5a7a8a;font-weight:700;letter-spacing:0.06em;">ACCURACY</span></div>'
+        f'{_pz_divider}'
         f'<div style="{_pz_stat_style}">'
-        f'<span style="font-size:1.2em;font-weight:800;color:#e2c97e;">{_pz_streak}</span>'
+        f'<span style="font-size:1.2em;font-weight:800;color:#e2c97e;text-shadow:0 0 8px #e2c97e33;">{_pz_streak}</span>'
         f'<span style="font-size:0.62em;color:#5a7a8a;font-weight:700;letter-spacing:0.06em;">STREAK</span></div>'
+        f'{_pz_divider}'
         f'<div style="{_pz_stat_style}">'
-        f'<span style="font-size:1.2em;font-weight:800;color:#5a7ac8;">{_pz_best}</span>'
+        f'<span style="font-size:1.2em;font-weight:800;color:#5a7ac8;text-shadow:0 0 8px #5a7ac833;">{_pz_best}</span>'
         f'<span style="font-size:0.62em;color:#5a7a8a;font-weight:700;letter-spacing:0.06em;">BEST</span></div>'
         f'</div>',
         unsafe_allow_html=True,
@@ -5675,6 +6111,7 @@ def render_puzzles_tab():
         db.update_puzzle_phase(_current_user(), _phase, True)
         for _pc in puzzle.get("concepts", []):
             db.update_concept_mastery(_current_user(), _pc, True)
+        st.session_state.pop("_concept_mastery_cache", None)
         st.session_state.puzzles_solved_today = st.session_state.get("puzzles_solved_today", 0) + 1
         st.session_state.puzzle_correct_today = st.session_state.get("puzzle_correct_today", 0) + 1
         st.session_state.puzzle_explanation_pending = True
@@ -5694,6 +6131,7 @@ def render_puzzles_tab():
         db.update_puzzle_phase(_current_user(), _phase, False)
         for _pc in puzzle.get("concepts", []):
             db.update_concept_mastery(_current_user(), _pc, False)
+        st.session_state.pop("_concept_mastery_cache", None)
         st.session_state.puzzles_solved_today = st.session_state.get("puzzles_solved_today", 0) + 1
         st.session_state.puzzle_explanation_pending = True
         st.session_state.puzzle_explanation_correct = False
@@ -5702,7 +6140,7 @@ def render_puzzles_tab():
 
     # ── Pre-compute display variables ─────────────────────────────────────────
     cls         = puzzle["classification"]
-    cls_color   = {"blunder": "#e53935", "mistake": "#fb8c00"}.get(cls, "#81c784")
+    cls_color   = {"blunder": "#e57373", "mistake": "#fb8c00"}.get(cls, "#81c784")
     phase_str   = puzzle["phase"].capitalize() if puzzle["phase"] else ""
     color_cap   = puzzle["player_color"].capitalize()
     pz_accent   = "#e2c97e" if puzzle["player_color"] == "white" else "#90aec4"
@@ -5802,7 +6240,7 @@ def render_puzzles_tab():
         _puz_concepts = puzzle.get("concepts", [])
         if _puz_concepts:
             _ct_pills = "".join(
-                f'<span style="background:#1e2e4a;border:1px solid #2a4a6a;'
+                f'<span style="background:#1e2e3e;border:1px solid #2a4a6a;'
                 f'border-radius:4px;padding:1px 7px;font-size:0.68em;'
                 f'color:#7ab8e0;margin:2px;display:inline-block;">{c}</span>'
                 for c in _puz_concepts
@@ -5861,7 +6299,7 @@ def render_puzzles_tab():
             _bs_label = "BEST SKILL"
         def _mini_stat(label, value, color="#cce0f4"):
             return (
-                f'<div style="background:#0f1923;border:1px solid #1e2e3e;border-radius:8px;'
+                f'<div style="background:#111827;border:1px solid #1e2e3e;border-radius:8px;'
                 f'padding:8px 6px;text-align:center;">'
                 f'<div style="font-size:1.1em;font-weight:800;color:{color};">{value}</div>'
                 f'<div style="font-size:0.62em;color:#7a9ab0;font-weight:600;letter-spacing:0.05em;'
@@ -6106,41 +6544,6 @@ def render_puzzles_tab():
 
 # ── Tab: Chess.com Profile ───────────────────────────────────────────────────
 
-def _pawn_capture_html() -> str:
-    """CSS animation: white and black kings advance toward each other, cross swords, retreat."""
-    return """
-<div style="text-align:center;padding:36px 0 20px;
-            background:repeating-conic-gradient(#111a2e 0% 25%,#0c1021 0% 50%) 0 0/44px 44px;
-            border-radius:12px;border:1px solid #1e2e4a;">
-  <style>
-    @keyframes wKingAdv {
-      0%,100% { transform: translateX(-52px); }
-      35%,65% { transform: translateX(0); }
-    }
-    @keyframes bKingAdv {
-      0%,100% { transform: translateX(52px); }
-      35%,65% { transform: translateX(0); }
-    }
-    @keyframes swordsGlow {
-      0%,30%   { opacity:0; transform:translateY(0) scale(0.7); }
-      48%,58%  { opacity:1; transform:translateY(-3px) scale(1.15); }
-      72%,100% { opacity:0; transform:translateY(0) scale(0.7); }
-    }
-    .anim-wk { font-size:3.2em; display:inline-block; color:#f0ead6; line-height:1;
-               animation:wKingAdv 3.2s ease-in-out infinite; }
-    .anim-bk { font-size:3.2em; display:inline-block; color:#6a8aaa; line-height:1;
-               animation:bKingAdv 3.2s ease-in-out infinite; }
-    .anim-sw { font-size:1.4em; display:inline-block; color:#e2c97e; line-height:1;
-               margin:0 -6px; vertical-align:middle;
-               animation:swordsGlow 3.2s ease-in-out infinite; }
-  </style>
-  <span class="anim-wk">♔</span><span class="anim-sw">⚔</span><span class="anim-bk">♚</span>
-  <div style="font-size:0.78em;color:#7a9ab0;margin-top:16px;letter-spacing:0.06em;">
-    Analysing games…
-  </div>
-</div>"""
-
-
 def _piece_rating_html(rating: int, size: str = "1.5em") -> str:
     """
     Render the 5-piece tier progression.
@@ -6185,6 +6588,138 @@ def _performance_level(blunders_pg: float, mistakes_pg: float) -> int:
     return 1                    # Beginner
 
 
+def _section_header(title: str, accent: str = "#5a7ac8", icon: str = "", first: bool = False) -> str:
+    """Consistent section header for Profile tab panels."""
+    border_top = "" if first else "border-top:1px solid #1e2e3e;padding-top:14px;margin-top:18px;"
+    icon_html = f'<span style="margin-right:6px;">{icon}</span>' if icon else ""
+    return (
+        f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;{border_top}">'
+        f'<div style="width:3px;height:16px;background:{accent};border-radius:2px;flex-shrink:0;"></div>'
+        f'{icon_html}'
+        f'<span style="font-size:0.85em;color:{accent};font-weight:700;'
+        f'letter-spacing:0.06em;text-transform:uppercase;">{title}</span></div>'
+    )
+
+
+def _sub_nav(items: list[tuple[str, str, str, str]], state_key: str, cols: int = 0) -> str:
+    """Unified sub-navigation: clickable card grid + divider. Returns selected section name."""
+    if cols <= 0:
+        cols = min(len(items), 3)
+    current = st.session_state.get(state_key, items[0][0])
+
+    # Build card grid HTML with clickable cards
+    cards_html = f'<div style="display:grid;grid-template-columns:repeat({cols},1fr);gap:8px;margin-bottom:8px;">'
+    for name, icon_html, description, accent_color in items:
+        active = current == name
+        bg = "#0d1f30" if active else "#111827"
+        border = accent_color if active else "#1e2e3e"
+        bw = "2px" if active else "1px"
+        opacity = "1" if active else "0.7"
+        cursor = "default" if active else "pointer"
+        # data-subnav attribute used by JS below to find + click the matching hidden button
+        cards_html += (
+            f'<div data-subnav="{state_key}:{name}" style="background:{bg};border:{bw} solid {border};'
+            f'border-radius:10px;padding:10px 12px;opacity:{opacity};'
+            f'cursor:{cursor};transition:all 0.15s;user-select:none;">'
+            f'<div style="display:flex;align-items:center;gap:8px;">'
+            f'<span style="font-size:1.15em;">{icon_html}</span>'
+            f'<span style="font-size:0.95em;font-weight:700;color:{accent_color};">'
+            f'{name}</span></div>'
+            f'<div style="font-size:0.8em;color:#5a8ab0;margin-top:3px;'
+            f'line-height:1.3;">{description}</div></div>'
+        )
+    cards_html += '</div>'
+    st.markdown(cards_html, unsafe_allow_html=True)
+
+    # Hidden Streamlit buttons — the JS below will click these when a card is clicked.
+    # Use a unique prefix so JS can find them without colliding with other buttons.
+    _sn_prefix = f"\u200b{state_key}\u200b"  # zero-width space wrapper makes text unique
+    for name, _, _, _ in items:
+        is_active = current == name
+        if st.button(
+            f"{_sn_prefix}{name}",
+            key=f"subnav_{state_key}_{name}",
+            disabled=is_active,
+        ):
+            st.session_state[state_key] = name
+            st.rerun()
+
+    # JS iframe: hide the prefixed buttons + attach click handlers to card divs
+    _click_js = f"""<script>
+    (function(){{
+        var PREFIX = "{_sn_prefix}";
+        function setup(){{
+            var doc = window.parent.document;
+            var allBtns = doc.querySelectorAll('button');
+            var snBtns = [];
+            allBtns.forEach(function(b){{
+                var t = (b.innerText || '').trim();
+                if(t.indexOf(PREFIX) === 0){{
+                    var name = t.substring(PREFIX.length);
+                    var container = b.closest('[data-testid="stButton"]')
+                                  || b.closest('.stButton')
+                                  || b.parentElement;
+                    if(container){{
+                        container.style.cssText =
+                            'height:0;overflow:hidden;margin:0;padding:0;'
+                          + 'position:absolute;left:-9999px;';
+                    }}
+                    snBtns.push({{name: name, btn: b}});
+                }}
+            }});
+            var cards = doc.querySelectorAll('[data-subnav^="{state_key}:"]');
+            if(!cards.length){{ setTimeout(setup, 120); return; }}
+            cards.forEach(function(card){{
+                if(card._snBound) return;
+                card._snBound = true;
+                card.addEventListener('click', function(){{
+                    var name = card.getAttribute('data-subnav').split(':').slice(1).join(':');
+                    for(var i=0;i<snBtns.length;i++){{
+                        if(snBtns[i].name === name){{
+                            snBtns[i].btn.click(); return;
+                        }}
+                    }}
+                }});
+                card.addEventListener('mouseenter', function(){{
+                    if(card.style.cursor!=='default') card.style.opacity='1';
+                }});
+                card.addEventListener('mouseleave', function(){{
+                    if(card.style.cursor!=='default')
+                        card.style.opacity=card.dataset.origOpacity||'0.7';
+                }});
+                card.dataset.origOpacity = card.style.opacity;
+            }});
+        }}
+        setTimeout(setup, 80);
+    }})();
+    </script>"""
+    components.html(_click_js, height=0)
+
+    # Divider
+    st.markdown(
+        '<div style="height:1px;background:linear-gradient(90deg,transparent,#1e2e3e 20%,#1e2e3e 80%,transparent);'
+        'margin:4px 0 16px;"></div>',
+        unsafe_allow_html=True,
+    )
+    return st.session_state.get(state_key, items[0][0])
+
+
+def _empty_state(icon: str, title: str, body: str, *, action_label: str = "", action_nav: str = "") -> None:
+    """Centered empty-state card with icon, title, description, and optional CTA button."""
+    st.markdown(
+        f'<div style="text-align:center;padding:32px 16px;">'
+        f'<div style="font-size:2em;margin-bottom:10px;">{icon}</div>'
+        f'<div style="font-size:1.05em;font-weight:700;color:#cce0f4;margin-bottom:6px;">{title}</div>'
+        f'<div style="font-size:0.88em;color:#7a9ab0;max-width:400px;margin:0 auto;line-height:1.6;">'
+        f'{body}</div></div>',
+        unsafe_allow_html=True,
+    )
+    if action_label and action_nav:
+        if st.button(action_label, key=f"empty_{action_nav}"):
+            st.session_state[action_nav] = True
+            st.rerun()
+
+
 def _profile_overview_html(profile: dict) -> str:
     """Compact header: username, performance level, error rate, record."""
     rec  = profile.get("record", {})
@@ -6207,7 +6742,7 @@ def _profile_overview_html(profile: dict) -> str:
     err_line = (" + ".join(err_parts) + " per game") if err_parts else "No significant errors"
 
     return f"""
-<div style="background:#111827;border:1px solid #253450;border-radius:12px;
+<div style="background:#111827;border:1px solid #1e2e3e;border-radius:12px;
             padding:12px 16px 10px;margin-bottom:16px;">
   <div style="font-size:1.5em;font-weight:800;color:#cce0f4;margin-bottom:2px;">
     ♟ {user}
@@ -6220,7 +6755,7 @@ def _profile_overview_html(profile: dict) -> str:
       <div style="margin-bottom:4px;">{pieces_html}</div>
       <div style="font-size:0.75em;color:#7a9ab0;margin-top:4px;">{err_line}</div>
     </div>
-    <div style="height:36px;width:1px;background:#253450;flex-shrink:0;"></div>
+    <div style="height:36px;width:1px;background:#1e2e3e;flex-shrink:0;"></div>
     <div style="display:flex;gap:10px;">
       <div style="text-align:center;">
         <div style="font-size:1.6em;font-weight:700;color:#81c784;">{wins}</div>
@@ -6549,6 +7084,69 @@ def _render_takeaway_card(takeaway: str):
         f'{takeaway}</div></div>',
         unsafe_allow_html=True,
     )
+
+
+def _render_try_this(concept: str):
+    """Render a single inline practice position from the user's games after the takeaway card."""
+    _cat = _concept_to_category(concept)
+    if not _cat or concept in _THEORY_ONLY_CONCEPTS:
+        return
+    # Get 1 puzzle position — skip silently if none available
+    _try_key = f"_try_this_{concept.lower()}"
+    if _try_key not in st.session_state:
+        _positions = _build_course_puzzles(concept, _cat, n=1)
+        st.session_state[_try_key] = _positions[0] if _positions else None
+    _pos = st.session_state[_try_key]
+    if not _pos:
+        return
+
+    st.markdown(_section_header("Try This", "#4fc3f7"), unsafe_allow_html=True)
+    st.markdown(
+        '<div style="font-size:0.88em;color:#a0bccc;margin-bottom:10px;">Find the best move:</div>',
+        unsafe_allow_html=True,
+    )
+    # Render board
+    try:
+        _try_board = chess.Board(_pos["fen"])
+        _try_orient = chess.WHITE if _pos.get("player_color", "white") == "white" else chess.BLACK
+        _try_svg = chess.svg.board(_try_board, orientation=_try_orient, size=280,
+                                   style="background-color: transparent;")
+        st.markdown(
+            f'<div style="display:flex;justify-content:center;margin-bottom:8px;">{_try_svg}</div>',
+            unsafe_allow_html=True,
+        )
+    except Exception:
+        return
+
+    _try_answer_key = f"_try_answer_{concept.lower()}"
+    _try_submitted = st.session_state.get(f"_try_done_{concept.lower()}", False)
+
+    if not _try_submitted:
+        _try_guess = st.text_input("Your move (e.g. Nxd5)", key=_try_answer_key,
+                                   label_visibility="collapsed", placeholder="Your move (e.g. Nxd5)")
+        if st.button("Check", key=f"try_check_{concept}"):
+            _correct_move = _pos["best_move_san"]
+            _guess_clean = _try_guess.strip().rstrip("+#")
+            _correct_clean = _correct_move.rstrip("+#")
+            if _guess_clean.lower() == _correct_clean.lower():
+                st.success(f"Correct! **{_correct_move}** is the best move.")
+                username = _current_user()
+                if username:
+                    db.update_concept_mastery(username, concept, correct=True)
+                    st.session_state.pop("_concept_mastery_cache", None)
+            else:
+                st.error(f"The best move was **{_correct_move}**.")
+                username = _current_user()
+                if username:
+                    db.update_concept_mastery(username, concept, correct=False)
+                    st.session_state.pop("_concept_mastery_cache", None)
+            st.session_state[f"_try_done_{concept.lower()}"] = True
+    else:
+        _correct_move = _pos["best_move_san"]
+        st.markdown(
+            f'<div style="font-size:0.88em;color:#81c784;">Best move: <strong>{_correct_move}</strong></div>',
+            unsafe_allow_html=True,
+        )
 
 
 def _board_iframe_height() -> int:
@@ -7710,15 +8308,7 @@ def _render_color_breakdown(summaries: list[dict], inline: bool = False):
     ws, bs = _stats(white_s), _stats(black_s)
 
     if not inline:
-        st.markdown("---")
-        st.markdown(
-            '<div style="display:flex;align-items:center;gap:9px;margin-bottom:12px;">'
-            '<div style="width:3px;height:15px;background:#90a4ae;border-radius:2px;flex-shrink:0;"></div>'
-            '<span style="font-size:0.9em;color:#90a4ae;font-weight:700;'
-            'letter-spacing:0.04em;">WHITE vs BLACK</span>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown(_section_header("White vs Black", "#90a4ae"), unsafe_allow_html=True)
 
     if inline:
         # Stacked cards for compact side-by-side layout
@@ -7727,7 +8317,7 @@ def _render_color_breakdown(summaries: list[dict], inline: bool = False):
                 continue
             perf_html = _piece_rating_html(_performance_level(stats["blunders"], stats["mistakes"]), "1.2em")
             st.markdown(
-                f'<div style="background:#0f1923;border:1px solid #1e2e3e;border-radius:10px;padding:14px;margin-bottom:8px;">'
+                f'<div style="background:#111827;border:1px solid #1e2e3e;border-radius:10px;padding:14px;margin-bottom:8px;">'
                 f'<div style="font-size:1.05em;font-weight:700;color:#cce0f4;margin-bottom:8px;">'
                 f'{symbol} {side} <span style="font-size:0.7em;color:#7a9ab0;">({stats["n"]} games)</span></div>'
                 f'<div style="margin-bottom:6px;">{perf_html}</div>'
@@ -7756,7 +8346,7 @@ def _render_color_breakdown(summaries: list[dict], inline: bool = False):
         perf_html = _piece_rating_html(_performance_level(stats["blunders"], stats["mistakes"]), "1.2em")
         with col:
             st.markdown(
-                f'<div style="background:#0f1923;border:1px solid #1e2e3e;border-radius:10px;padding:16px;">'
+                f'<div style="background:#111827;border:1px solid #1e2e3e;border-radius:10px;padding:16px;">'
                 f'<div style="font-size:1.05em;font-weight:700;color:#cce0f4;margin-bottom:10px;">'
                 f'{symbol} {side} <span style="font-size:0.7em;color:#7a9ab0;">({stats["n"]} games)</span></div>'
                 f'<div style="margin-bottom:8px;">{perf_html}</div>'
@@ -7915,15 +8505,7 @@ def _render_opening_repertoire(summaries: list[dict], inline: bool = False):
     sorted_ops = sorted(openings.items(), key=lambda x: -x[1]["n"])[:8]
 
     if not inline:
-        st.markdown("---")
-        st.markdown(
-            '<div style="display:flex;align-items:center;gap:9px;margin-bottom:12px;">'
-            '<div style="width:3px;height:15px;background:#9c7c38;border-radius:2px;flex-shrink:0;"></div>'
-            '<span style="font-size:0.9em;color:#e2c97e;font-weight:700;'
-            'letter-spacing:0.04em;">OPENING REPERTOIRE</span>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown(_section_header("Opening Repertoire", "#e2c97e"), unsafe_allow_html=True)
 
     # Check if drills are available for Practice buttons
     _drills = st.session_state.get("opening_drills", {})
@@ -7936,7 +8518,7 @@ def _render_opening_repertoire(summaries: list[dict], inline: bool = False):
         bar_color   = "#81c784" if win_pct >= 55 else "#ffb74d" if win_pct >= 40 else "#e57373"
         err_color   = "#81c784" if blunders_pg < 0.5 else "#ffb74d" if blunders_pg < 1.5 else "#e57373"
         st.markdown(
-            f'<div style="background:#0f1923;border:1px solid #1e2e3e;border-radius:8px;'
+            f'<div style="background:#111827;border:1px solid #1e2e3e;border-radius:8px;'
             f'padding:10px 14px;margin-bottom:6px;">'
             f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'
             f'<span style="font-size:0.88em;font-weight:600;color:#cce0f4;">{op_name}</span>'
@@ -8223,6 +8805,167 @@ def _get_coach_starters() -> list[str]:
         if s not in starters:
             starters.append(s)
     return starters[:4]
+
+
+def render_review_tab():
+    """Spaced repetition review of previously studied concepts."""
+    pd = st.session_state.get("profile_data")
+    if not pd:
+        st.info("Build your profile first to unlock spaced review.")
+        return
+
+    username = _current_user()
+    review_stats = db.get_review_stats(username)
+    due_items = db.get_due_reviews(username)
+    all_items = db.get_all_review_items(username)
+
+    # ── Stats header ──────────────────────────────────────────────────────────
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.metric("In Queue", review_stats["total"])
+    with c2:
+        st.metric("Due Today", review_stats["due"])
+    with c3:
+        st.metric("Mastered", review_stats["mastered"])
+
+    if not all_items:
+        st.markdown(
+            '<div style="text-align:center;padding:40px;color:#5a8ab0;">'
+            '<div style="font-size:2em;margin-bottom:12px;">No review items yet</div>'
+            '<div style="font-size:0.95em;">Complete lessons in <strong>Coaching</strong> '
+            'to start building your review queue. Each concept you study '
+            'gets scheduled for spaced repetition automatically.</div></div>',
+            unsafe_allow_html=True,
+        )
+        return
+
+    # ── Active review session ─────────────────────────────────────────────────
+    if due_items:
+        st.markdown(
+            f'<div style="background:#0d1f30;border:2px solid #3a6ea5;border-radius:12px;'
+            f'padding:18px 22px;margin-bottom:16px;">'
+            f'<div style="font-size:1.1em;font-weight:700;color:#e2c97e;">'
+            f'{len(due_items)} concept{"s" if len(due_items) != 1 else ""} due for review</div>'
+            f'<div style="font-size:0.85em;color:#7a9bb8;margin-top:4px;">'
+            f'Rate your recall to schedule the next review.</div></div>',
+            unsafe_allow_html=True,
+        )
+
+        # Show one concept at a time
+        review_idx = st.session_state.get("_review_idx", 0)
+        if review_idx >= len(due_items):
+            st.success("All reviews complete for today!")
+            if st.button("Back to queue", key="review_done_back"):
+                st.session_state.pop("_review_idx", None)
+                st.rerun()
+            return
+
+        item = due_items[review_idx]
+        concept = item["concept"]
+
+        # Show the concept name with a reveal button
+        st.markdown(
+            f'<div style="font-size:1.3em;font-weight:700;color:#cce0f4;'
+            f'margin:12px 0 8px;">{concept}</div>',
+            unsafe_allow_html=True,
+        )
+        st.caption(f"Review {review_idx + 1} of {len(due_items)}")
+
+        # Try to load the lesson content
+        lesson_content = db.get_lesson(username, concept)
+        reveal_key = f"_review_revealed_{concept}"
+
+        if not st.session_state.get(reveal_key):
+            st.markdown(
+                '<div style="background:#152a40;border-radius:10px;padding:24px;'
+                'text-align:center;color:#5a8ab0;margin:12px 0;">'
+                'Try to recall what you learned about this concept before revealing.</div>',
+                unsafe_allow_html=True,
+            )
+            if st.button("Show Lesson", key=f"review_reveal_{concept}",
+                         use_container_width=True):
+                st.session_state[reveal_key] = True
+                st.rerun()
+        else:
+            if lesson_content:
+                _lt, _, _ = parse_lesson_diagrams(lesson_content)
+                _tk = _extract_takeaway(_lt)
+                if _tk:
+                    st.markdown(
+                        f'<div style="background:linear-gradient(135deg,#2a1f0a,#3a2d10);'
+                        f'border-left:4px solid #e2c97e;border-radius:8px;padding:14px 16px;'
+                        f'margin:10px 0;">'
+                        f'<div style="font-size:0.75em;color:#c4a84e;font-weight:600;'
+                        f'text-transform:uppercase;letter-spacing:0.05em;">Key Takeaway</div>'
+                        f'<div style="color:#e8dcc0;font-size:0.92em;margin-top:4px;">'
+                        f'{_tk}</div></div>',
+                        unsafe_allow_html=True,
+                    )
+                with st.expander("Full lesson", expanded=False):
+                    st.markdown(_lt)
+            else:
+                st.info("Lesson content not available. Rate based on your memory.")
+
+            # SM-2 quality rating buttons
+            st.markdown(
+                '<div style="font-size:0.9em;color:#7a9bb8;margin:12px 0 8px;">'
+                'How well did you remember this?</div>',
+                unsafe_allow_html=True,
+            )
+            q_cols = st.columns(4)
+            _quality_options = [
+                ("Forgot", 1, "#e57373"),
+                ("Hard", 3, "#ffb74d"),
+                ("Good", 4, "#81c784"),
+                ("Easy", 5, "#4fc3f7"),
+            ]
+            for i, (label, quality, color) in enumerate(_quality_options):
+                with q_cols[i]:
+                    if st.button(label, key=f"review_q_{concept}_{quality}",
+                                 use_container_width=True):
+                        result = db.update_review(username, concept, quality)
+                        st.session_state.pop(reveal_key, None)
+                        st.session_state["_review_idx"] = review_idx + 1
+                        st.rerun()
+
+    else:
+        st.markdown(
+            '<div style="text-align:center;padding:30px;color:#81c784;">'
+            '<div style="font-size:1.5em;margin-bottom:8px;">All caught up!</div>'
+            '<div style="font-size:0.9em;color:#5a8ab0;">'
+            'No concepts due for review right now. Keep studying!</div></div>',
+            unsafe_allow_html=True,
+        )
+
+    # ── Upcoming schedule ─────────────────────────────────────────────────────
+    if all_items:
+        with st.expander("Review Schedule", expanded=False):
+            from datetime import date
+            today = date.today().isoformat()
+            for item in all_items:
+                concept = item["concept"]
+                next_rev = item["next_review"]
+                interval = item["interval_days"]
+                reps = item["repetitions"]
+
+                if next_rev <= today:
+                    status_color = "#e57373"
+                    status = "DUE"
+                elif interval >= 21:
+                    status_color = "#4fc3f7"
+                    status = "MASTERED"
+                else:
+                    status_color = "#5a8ab0"
+                    status = f"in {interval}d"
+
+                st.markdown(
+                    f'<div style="display:flex;justify-content:space-between;'
+                    f'align-items:center;padding:6px 0;border-bottom:1px solid #1e2e3e;">'
+                    f'<span style="color:#b0c8d8;">{concept}</span>'
+                    f'<span style="color:{status_color};font-size:0.8em;font-weight:600;">'
+                    f'{status}</span></div>',
+                    unsafe_allow_html=True,
+                )
 
 
 def render_coach_tab():
@@ -8610,6 +9353,315 @@ startGame();
 </body></html>"""
 
 
+def render_master_games_tab():
+    """Master game study — browse and learn from classic games."""
+    st.markdown(
+        '<div style="font-size:0.72em;color:#a0bccc;font-weight:700;'
+        'letter-spacing:0.06em;margin:8px 0 4px;">MASTER GAME STUDY</div>'
+        '<p style="color:#7a9ab0;font-size:0.82em;margin-bottom:16px;">'
+        'Study classic master games with move-by-move navigation and board visualization.</p>',
+        unsafe_allow_html=True,
+    )
+
+    # Classic game selection
+    _mg_titles = [g["title"] for g in chess_data.CLASSIC_GAMES]
+    _mg_selected = st.selectbox(
+        "Choose a game:",
+        range(len(chess_data.CLASSIC_GAMES)),
+        format_func=lambda i: f'{chess_data.CLASSIC_GAMES[i]["title"]} — {chess_data.CLASSIC_GAMES[i]["theme"]}',
+        key="_mg_selected",
+    )
+
+    _mg_info = chess_data.CLASSIC_GAMES[_mg_selected]
+
+    # Reset quiz scores when changing games
+    _mg_prev_game = st.session_state.get("_mg_prev_game")
+    if _mg_prev_game != _mg_selected:
+        st.session_state["_mg_prev_game"] = _mg_selected
+        st.session_state["_mg_quiz_correct"] = 0
+        st.session_state["_mg_quiz_total"] = 0
+        # Clear any per-move quiz state from previous game
+        _mg_stale = [k for k in st.session_state if k.startswith("_mg_quiz_answered_")]
+        for k in _mg_stale:
+            del st.session_state[k]
+
+    st.markdown(
+        f'<div style="background:#0d1f30;border:1px solid #2a4060;border-radius:10px;'
+        f'padding:14px 18px;margin-bottom:14px;">'
+        f'<div style="font-size:1.05em;color:#e2c97e;font-weight:700;">{_mg_info["title"]}</div>'
+        f'<div style="color:#5a8ab0;font-size:0.85em;margin-top:4px;">{_mg_info["desc"]}</div>'
+        f'<div style="margin-top:6px;">'
+        f'<span style="background:#1e3050;color:#7ab0e0;padding:3px 8px;border-radius:4px;'
+        f'font-size:0.75em;font-weight:600;">{_mg_info["theme"]}</span></div></div>',
+        unsafe_allow_html=True,
+    )
+
+    # Load game
+    _mg_cache_key = f"_mg_game_{_mg_info['id']}"
+    if _mg_cache_key not in st.session_state:
+        with st.spinner("Loading game..."):
+            _mg_data = chess_data.get_master_game(_mg_info["id"])
+        st.session_state[_mg_cache_key] = _mg_data
+
+    _mg_data = st.session_state.get(_mg_cache_key)
+    if not _mg_data or not _mg_data.get("pgn"):
+        st.warning("Could not load this game from Lichess. Try again later.")
+        return
+
+    # Parse PGN
+    import io as _io
+    try:
+        _mg_pgn_game = chess.pgn.read_game(_io.StringIO(_mg_data["pgn"]))
+        _mg_moves = list(_mg_pgn_game.mainline_moves())
+        _mg_headers = dict(_mg_pgn_game.headers)
+    except Exception:
+        st.error("Failed to parse game PGN.")
+        return
+
+    if not _mg_moves:
+        st.warning("Game has no moves.")
+        return
+
+    # Move-by-move navigation
+    _mg_move_idx = st.session_state.get("_mg_move_idx", 0)
+    _mg_board = _mg_pgn_game.board()
+    _mg_move_sans = []
+    for m in _mg_moves:
+        _mg_move_sans.append(_mg_board.san(m))
+        _mg_board.push(m)
+
+    # Reset board to current position
+    _mg_board = _mg_pgn_game.board()
+    for m in _mg_moves[:_mg_move_idx]:
+        _mg_board.push(m)
+
+    # Board display
+    _mg_svg = chess.svg.board(
+        _mg_board, size=360,
+        lastmove=_mg_moves[_mg_move_idx - 1] if _mg_move_idx > 0 else None,
+        style="background-color: transparent;",
+    )
+    st.markdown(
+        f'<div style="display:flex;justify-content:center;">{_mg_svg}</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Move info
+    _mg_result = _mg_headers.get("Result", "*")
+    _mg_move_text = ""
+    if _mg_move_idx > 0:
+        _mg_move_num = (_mg_move_idx + 1) // 2
+        _mg_is_white = (_mg_move_idx - 1) % 2 == 0
+        _mg_prefix = f"{_mg_move_num}." if _mg_is_white else f"{_mg_move_num}..."
+        _mg_move_text = f'{_mg_prefix} {_mg_move_sans[_mg_move_idx - 1]}'
+    else:
+        _mg_move_text = "Starting position"
+
+    st.markdown(
+        f'<div style="text-align:center;color:#b0c8d8;font-size:0.95em;margin:8px 0;">'
+        f'<b>{_mg_move_text}</b> &nbsp; '
+        f'<span style="color:#5a8ab0;font-size:0.8em;">'
+        f'({_mg_move_idx}/{len(_mg_moves)}) &nbsp; Result: {_mg_result}</span></div>',
+        unsafe_allow_html=True,
+    )
+
+    # Move slider for quick navigation
+    _mg_slider_val = st.slider(
+        "Move", 0, len(_mg_moves), _mg_move_idx,
+        key="_mg_slider", label_visibility="collapsed",
+    )
+    if _mg_slider_val != _mg_move_idx:
+        st.session_state["_mg_move_idx"] = _mg_slider_val
+        st.rerun()
+
+    # Navigation buttons
+    _nc1, _nc2, _nc3, _nc4 = st.columns(4)
+    with _nc1:
+        if st.button("⏮", key="mg_first", use_container_width=True,
+                     disabled=_mg_move_idx == 0):
+            st.session_state["_mg_move_idx"] = 0
+            st.rerun()
+    with _nc2:
+        if st.button("◀", key="mg_prev", use_container_width=True,
+                     disabled=_mg_move_idx == 0):
+            st.session_state["_mg_move_idx"] = _mg_move_idx - 1
+            st.rerun()
+    with _nc3:
+        if st.button("▶", key="mg_next", use_container_width=True,
+                     disabled=_mg_move_idx >= len(_mg_moves)):
+            st.session_state["_mg_move_idx"] = _mg_move_idx + 1
+            st.rerun()
+    with _nc4:
+        if st.button("⏭", key="mg_last", use_container_width=True,
+                     disabled=_mg_move_idx >= len(_mg_moves)):
+            st.session_state["_mg_move_idx"] = len(_mg_moves)
+            st.rerun()
+
+    # Move list
+    with st.expander("Full move list", expanded=False):
+        _mg_ml = ""
+        for i in range(0, len(_mg_move_sans), 2):
+            _move_num = i // 2 + 1
+            _white_san = _mg_move_sans[i]
+            _black_san = _mg_move_sans[i + 1] if i + 1 < len(_mg_move_sans) else ""
+            _w_style = "color:#4fc3f7;font-weight:700;" if i + 1 == _mg_move_idx else "color:#cce0f4;"
+            _b_style = "color:#4fc3f7;font-weight:700;" if i + 2 == _mg_move_idx else "color:#cce0f4;"
+            _mg_ml += (
+                f'<span style="color:#5a8ab0;font-size:0.8em;">{_move_num}.</span>'
+                f'<span style="{_w_style}">{_white_san}</span> '
+            )
+            if _black_san:
+                _mg_ml += f'<span style="{_b_style}">{_black_san}</span> '
+        st.markdown(
+            f'<div style="line-height:1.8;font-size:0.9em;">{_mg_ml}</div>',
+            unsafe_allow_html=True,
+        )
+
+    # "What would you play?" interactive quiz
+    if _mg_move_idx < len(_mg_moves):
+        st.markdown("---")
+        _mg_to_move = "White" if _mg_board.turn == chess.WHITE else "Black"
+        _mg_master_san = _mg_move_sans[_mg_move_idx]
+        _mg_answered_key = f"_mg_quiz_answered_{_mg_move_idx}"
+        _mg_q_correct = st.session_state.get("_mg_quiz_correct", 0)
+        _mg_q_total = st.session_state.get("_mg_quiz_total", 0)
+
+        # Score display
+        if _mg_q_total > 0:
+            st.markdown(
+                f'<div style="text-align:center;color:#7ab0e0;font-size:0.85em;'
+                f'margin-bottom:6px;font-weight:600;">'
+                f'Score: {_mg_q_correct}/{_mg_q_total}</div>',
+                unsafe_allow_html=True,
+            )
+
+        _mg_answer_state = st.session_state.get(_mg_answered_key)
+
+        if not _mg_answer_state:
+            # Unanswered — show quiz prompt + input
+            st.markdown(
+                f'<div style="text-align:center;color:#e2c97e;font-size:0.95em;'
+                f'font-weight:600;margin-bottom:4px;">'
+                f'What would you play as {_mg_to_move}?</div>',
+                unsafe_allow_html=True,
+            )
+            _mg_user_move = st.text_input(
+                "Your move (SAN notation, e.g. Nf3, e4, Qxd5):",
+                key=f"_mg_quiz_input_{_mg_move_idx}",
+                placeholder="e.g. Nf3",
+            )
+            _qc1, _qc2 = st.columns(2)
+            with _qc1:
+                _mg_check_clicked = st.button(
+                    "Check", key=f"_mg_quiz_check_{_mg_move_idx}",
+                    use_container_width=True, type="primary",
+                )
+            with _qc2:
+                _mg_skip_clicked = st.button(
+                    "Skip / Show Answer", key=f"_mg_quiz_skip_{_mg_move_idx}",
+                    use_container_width=True,
+                )
+
+            if _mg_check_clicked and _mg_user_move.strip():
+                _mg_user_input = _mg_user_move.strip()
+                try:
+                    _mg_parsed = _mg_board.parse_san(_mg_user_input)
+                    _mg_user_san = _mg_board.san(_mg_parsed)
+                    st.session_state["_mg_quiz_total"] = _mg_q_total + 1
+                    if _mg_user_san == _mg_master_san:
+                        st.session_state["_mg_quiz_correct"] = _mg_q_correct + 1
+                        st.session_state[_mg_answered_key] = {
+                            "result": "correct",
+                            "master": _mg_master_san,
+                            "user": _mg_user_san,
+                        }
+                    else:
+                        st.session_state[_mg_answered_key] = {
+                            "result": "different",
+                            "master": _mg_master_san,
+                            "user": _mg_user_san,
+                        }
+                    st.rerun()
+                except (chess.InvalidMoveError, chess.IllegalMoveError,
+                        chess.AmbiguousMoveError, ValueError):
+                    st.markdown(
+                        '<div style="background:#3e1a1a;border:1px solid #e57373;'
+                        'border-radius:8px;padding:10px 14px;margin:6px 0;'
+                        'text-align:center;color:#ef9a9a;font-weight:600;">'
+                        "That's not a legal move in this position.</div>",
+                        unsafe_allow_html=True,
+                    )
+            elif _mg_check_clicked and not _mg_user_move.strip():
+                st.warning("Type a move first.")
+
+            if _mg_skip_clicked:
+                st.session_state["_mg_quiz_total"] = _mg_q_total + 1
+                st.session_state[_mg_answered_key] = {
+                    "result": "skipped",
+                    "master": _mg_master_san,
+                }
+                st.rerun()
+        else:
+            # Already answered — show result
+            _mg_res = _mg_answer_state["result"]
+            if _mg_res == "correct":
+                st.markdown(
+                    f'<div style="background:#1a3e1a;border:1px solid #81c784;'
+                    f'border-radius:8px;padding:12px 14px;margin:6px 0;'
+                    f'text-align:center;color:#a5d6a7;font-weight:700;">'
+                    f'Correct! The master played {_mg_answer_state["master"]}</div>',
+                    unsafe_allow_html=True,
+                )
+            elif _mg_res == "different":
+                st.markdown(
+                    f'<div style="background:#3e2e1a;border:1px solid #ffb74d;'
+                    f'border-radius:8px;padding:12px 14px;margin:6px 0;'
+                    f'text-align:center;color:#ffe0b2;font-weight:600;">'
+                    f'The master played <b>{_mg_answer_state["master"]}</b>. '
+                    f'You suggested <b>{_mg_answer_state["user"]}</b>.</div>',
+                    unsafe_allow_html=True,
+                )
+            else:  # skipped
+                st.markdown(
+                    f'<div style="background:#152a40;border:1px solid #5a8ab0;'
+                    f'border-radius:8px;padding:12px 14px;margin:6px 0;'
+                    f'text-align:center;color:#b0c8d8;font-weight:600;">'
+                    f'The master played <b>{_mg_answer_state["master"]}</b></div>',
+                    unsafe_allow_html=True,
+                )
+
+            # "Next Position" button — advance to next move where same color plays
+            # Current _mg_move_idx is the quizzed move. Advance +2 to skip the
+            # opponent's reply so the same color is to move again.
+            _mg_next_quiz_idx = _mg_move_idx + 2
+            if _mg_next_quiz_idx < len(_mg_moves):
+                if st.button(
+                    f"Next Position ({_mg_to_move}'s turn) \u2192",
+                    key=f"_mg_quiz_next_{_mg_move_idx}",
+                    use_container_width=True,
+                ):
+                    st.session_state["_mg_move_idx"] = _mg_next_quiz_idx
+                    st.rerun()
+            elif _mg_move_idx + 1 < len(_mg_moves):
+                # At least one more move exists but for the other color
+                if st.button(
+                    "Next Move \u2192",
+                    key=f"_mg_quiz_next_{_mg_move_idx}",
+                    use_container_width=True,
+                ):
+                    st.session_state["_mg_move_idx"] = _mg_move_idx + 1
+                    st.rerun()
+            else:
+                _mg_pct = round(100 * _mg_q_correct / _mg_q_total) if _mg_q_total else 0
+                st.markdown(
+                    f'<div style="text-align:center;color:#e2c97e;font-size:0.9em;'
+                    f'margin-top:8px;font-weight:600;">'
+                    f'Game complete! Final score: {_mg_q_correct}/{_mg_q_total}'
+                    f' ({_mg_pct}%)</div>',
+                    unsafe_allow_html=True,
+                )
+
+
 def render_notation_tab():
     """Render the Board Notation Trainer section."""
     st.markdown(
@@ -8658,43 +9710,66 @@ def _render_onboarding_tour():
             "icon": "&#9812;",
         },
         {
-            "title": "Dashboard",
-            "body": "Your command center. See your stats, daily goals, achievements, and quick actions — all in one place.",
+            "title": "Home — Dashboard",
+            "body": (
+                "Your command center. Once you build a profile, you'll see your "
+                "<strong>stats</strong>, <strong>daily goals</strong>, "
+                "<strong>recommended next steps</strong>, recurring weaknesses, "
+                "and recent games — all in one place."
+            ),
             "icon": "&#128202;",
         },
         {
-            "title": "Profile",
-            "body": "Build your player profile by connecting your Chess.com or Lichess account. We'll analyze your games with Stockfish and Claude AI.",
+            "title": "Home — My Profile",
+            "body": (
+                "Connect your <strong>Chess.com</strong> or <strong>Lichess</strong> account "
+                "and we'll analyze your recent games to build a personalised coaching profile. "
+                "You'll get skill scores, error rates, and a performance tier."
+            ),
             "icon": "&#128100;",
             "nav": "navigate_to_profile",
         },
         {
-            "title": "No Online Account?",
+            "title": "Learn — My Path & Lessons",
             "body": (
-                "No problem! You can still use BoardSense without a Chess.com or Lichess account. "
-                "Go to <strong>Game Review</strong> and upload any PGN file to get full Stockfish + AI analysis. "
-                "You can also chat with the AI coach in the <strong>Learn</strong> tab — "
-                "just ask any chess question."
+                "<strong>My Path</strong> gives you a personalised learning sequence based on your weaknesses. "
+                "<strong>Lessons</strong> has AI-generated lessons for 37 chess concepts — each one "
+                "tailored to mistakes from your actual games."
             ),
-            "icon": "&#9899;",
-        },
-        {
-            "title": "Learn",
-            "body": "My Path gives you a personalized learning sequence. Coaching has concept lessons, Training has structured courses, and Ask Coach lets you chat with an AI coach.",
             "icon": "&#128218;",
             "nav": "navigate_to_coaching",
         },
         {
-            "title": "Puzzles",
-            "body": "Practice tactics from positions in YOUR actual games. Puzzles adapt to your weaknesses and track your improvement.",
+            "title": "Learn — Courses, Review & More",
+            "body": (
+                "<strong>Courses</strong> has structured courses by rating level. "
+                "<strong>Review</strong> uses spaced repetition to help you retain what you've learned. "
+                "<strong>Ask Coach</strong> lets you chat with an AI chess coach about anything. "
+                "<strong>Master Games</strong> lets you study classic games move by move."
+            ),
+            "icon": "&#127942;",
+        },
+        {
+            "title": "Practice",
+            "body": (
+                "<strong>Puzzles</strong> from your own games and the Lichess database, "
+                "matched to your skill level. "
+                "<strong>Game Review</strong> for move-by-move analysis of any game. "
+                "<strong>Openings</strong> to explore positions and drill your repertoire. "
+                "<strong>Endgames</strong> and <strong>Notation</strong> trainers too."
+            ),
             "icon": "&#9823;",
             "nav": "navigate_to_puzzles",
         },
         {
-            "title": "Game Review",
-            "body": "Upload any PGN or fetch from Chess.com/Lichess. Get move-by-move Stockfish analysis with Claude AI commentary on every critical moment.",
-            "icon": "&#128269;",
-            "nav": "navigate_to_review",
+            "title": "No Online Account?",
+            "body": (
+                "No problem! You can still <strong>review any game</strong> by uploading a PGN, "
+                "<strong>solve Lichess puzzles</strong>, "
+                "and <strong>chat with the AI coach</strong> — no account required."
+            ),
+            "icon": "&#9899;",
+            "nav": "navigate_to_dashboard",
         },
     ]
     if step >= len(_TOUR_STEPS):
@@ -8822,11 +9897,7 @@ def _generate_profile_report() -> str:
 
 def _render_export_section():
     """Render export/share buttons on the profile page."""
-    st.markdown(
-        '<div style="font-size:0.72em;color:#5a7ac8;font-weight:700;letter-spacing:0.06em;'
-        'text-transform:uppercase;margin:16px 0 8px;">EXPORT & SHARE</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown(_section_header("Export & Share", "#b39ddb"), unsafe_allow_html=True)
     _exp1, _exp2 = st.columns(2)
     with _exp1:
         report = _generate_profile_report()
@@ -8869,14 +9940,10 @@ def _render_session_analytics():
     elapsed = int(_sa_time.time() - st.session_state.get("_session_start", _sa_time.time()))
     mins = elapsed // 60
 
-    st.markdown(
-        '<div style="font-size:0.7em;color:#4a6080;font-weight:700;letter-spacing:0.1em;'
-        'text-transform:uppercase;margin:16px 0 8px;">THIS SESSION</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown(_section_header("This Session", "#4a6080"), unsafe_allow_html=True)
     _sa1, _sa2, _sa3, _sa4 = st.columns(4)
     _sa_card = (
-        '<div style="background:#0f1923;border:1px solid #1e2e3e;border-radius:8px;'
+        '<div style="background:#111827;border:1px solid #1e2e3e;border-radius:8px;'
         'padding:10px 8px;text-align:center;">'
         '<div style="font-size:1.2em;font-weight:700;color:{color};">{value}</div>'
         '<div style="font-size:0.65em;color:#7a9ab0;font-weight:600;margin-top:2px;">{label}</div></div>'
@@ -8937,11 +10004,7 @@ def _render_session_analytics():
 
 def _render_compare_profiles():
     """Compare two player profiles side by side."""
-    st.markdown(
-        '<div style="font-size:0.72em;color:#5a7ac8;font-weight:700;letter-spacing:0.06em;'
-        'text-transform:uppercase;margin:16px 0 8px;">COMPARE WITH A FRIEND</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown(_section_header("Compare With a Friend", "#4fc3f7"), unsafe_allow_html=True)
     _cmp_col1, _cmp_col2 = st.columns(2)
     with _cmp_col1:
         _cmp_plat = st.radio("Platform", ["Chess.com", "Lichess"],
@@ -9049,7 +10112,7 @@ def _render_compare_profiles():
 
 
 def _render_daily_puzzle():
-    """Show the Lichess daily puzzle on the dashboard."""
+    """Show the Lichess daily puzzle on the dashboard with interactive board."""
     dp = chess_data.get_daily_puzzle()
     if not dp:
         return
@@ -9080,6 +10143,7 @@ def _render_daily_puzzle():
         _dp_board.push(_dp_setup)
         _dp_fen = _dp_board.fen()
         _dp_color = "White" if _dp_board.turn == chess.WHITE else "Black"
+        _dp_player_color = "white" if _dp_board.turn == chess.WHITE else "black"
         # The actual answer is the second move in solution
         _dp_answer_uci = solution_uci[1] if len(solution_uci) > 1 else solution_uci[0]
         _dp_answer_san = _dp_board.san(chess.Move.from_uci(_dp_answer_uci))
@@ -9088,42 +10152,49 @@ def _render_daily_puzzle():
 
     themes_text = ", ".join(t.replace("_", " ").title() for t in themes[:3]) if themes else "Tactics"
 
-    st.markdown(
-        '<div style="border-top:1px solid #1e2e3e;padding-top:12px;margin-top:16px;">'
-        '<div style="display:flex;align-items:center;gap:9px;margin-bottom:10px;">'
-        '<div style="width:3px;height:15px;background:#5a7ac8;border-radius:2px;flex-shrink:0;"></div>'
-        '<span style="font-size:0.82em;color:#7ab0e0;font-weight:700;letter-spacing:0.04em;">'
-        'DAILY PUZZLE</span>'
-        f'<span style="font-size:0.72em;color:#5a7a8a;">Rating {rating} · {themes_text}</span>'
-        '</div></div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown(_section_header("Daily Puzzle", "#5a7ac8"), unsafe_allow_html=True)
 
-    _dp_c1, _dp_c2 = st.columns([2, 1])
-    with _dp_c1:
-        _dp_svg = chess.svg.board(
-            _dp_board, size=300, coordinates=True,
-            colors={"square light": "#e8dcc8", "square dark": "#7a945a"},
+    _dp_board_col, _dp_panel_col = st.columns([3, 2], gap="small")
+
+    with _dp_board_col:
+        _dp_reveal = st.session_state.get("_daily_puzzle_revealed", False)
+        st.components.v1.html(
+            _interactive_board_html(
+                fen=_dp_fen,
+                best_move_san=_dp_answer_san,
+                eval_before=0.0,
+                eval_after=0.0,
+                player_color=_dp_player_color,
+                puzzle_idx=9999,
+                phases=None,
+                reveal_solution=_dp_reveal,
+                highlight_hint=False,
+            ),
+            height=_board_iframe_height(),
+            scrolling=False,
         )
+
+    with _dp_panel_col:
         st.markdown(
-            f'<div style="display:flex;justify-content:center;">{_dp_svg}</div>',
-            unsafe_allow_html=True,
-        )
-    with _dp_c2:
-        st.markdown(
-            f'<div style="padding:8px 0;">'
-            f'<div style="font-size:0.88em;color:#cce0f4;font-weight:600;margin-bottom:8px;">'
+            f'<div style="background:#111827;border:1px solid #1e2e3e;border-radius:10px;'
+            f'padding:16px;">'
+            f'<div style="font-size:1.05em;color:#cce0f4;font-weight:700;margin-bottom:8px;">'
             f'{_dp_color} to move</div>'
-            f'<div style="font-size:0.78em;color:#7a9ab0;line-height:1.6;">'
-            f'Find the best move. This puzzle has been rated {rating} on Lichess.</div>'
+            f'<div style="font-size:0.9em;color:#7a9ab0;line-height:1.6;margin-bottom:10px;">'
+            f'Find the best move. Click a piece on the board to begin.</div>'
+            f'<div style="display:flex;gap:12px;font-size:0.88em;color:#a0bccc;">'
+            f'<span>Rating <strong style="color:#e2c97e;">{rating}</strong></span>'
+            f'<span style="color:#3a5a6a;">|</span>'
+            f'<span>{themes_text}</span></div>'
             f'</div>',
             unsafe_allow_html=True,
         )
 
-        _dp_reveal_key = "_daily_puzzle_revealed"
-        if st.button("Show Answer", key="daily_puzzle_reveal"):
-            st.session_state[_dp_reveal_key] = True
-        if st.session_state.get(_dp_reveal_key):
+        if not st.session_state.get("_daily_puzzle_revealed"):
+            if st.button("Show Solution", key="daily_puzzle_reveal", use_container_width=True):
+                st.session_state["_daily_puzzle_revealed"] = True
+                st.rerun()
+        else:
             full_line = []
             _dp_temp = _dp_board.copy()
             for _dp_u in solution_uci[1:]:
@@ -9135,10 +10206,10 @@ def _render_daily_puzzle():
                     break
             st.markdown(
                 f'<div style="background:#0d1f30;border:1px solid #1e3050;border-radius:8px;'
-                f'padding:10px 14px;margin-top:8px;">'
-                f'<div style="font-size:0.92em;color:#e2c97e;font-weight:700;margin-bottom:4px;">'
+                f'padding:12px 14px;margin-top:8px;">'
+                f'<div style="font-size:1em;color:#e2c97e;font-weight:700;margin-bottom:4px;">'
                 f'{_dp_answer_san}</div>'
-                f'<div style="font-size:0.78em;color:#90a4b8;">'
+                f'<div style="font-size:0.88em;color:#90a4b8;">'
                 f'Full line: {" ".join(full_line)}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
@@ -9146,7 +10217,7 @@ def _render_daily_puzzle():
             _dp_puzzle_url = f"https://lichess.org/training/{puzzle.get('id', '')}"
             st.markdown(
                 f'<a href="{_dp_puzzle_url}" target="_blank" '
-                f'style="font-size:0.78em;color:#5a7ac8;">Play on Lichess →</a>',
+                f'style="font-size:0.88em;color:#5a7ac8;">Play on Lichess →</a>',
                 unsafe_allow_html=True,
             )
 
@@ -9163,11 +10234,10 @@ def render_dashboard_tab():
     if not profile:
         # No profile yet — guided onboarding
         st.markdown(
-            '<div style="text-align:center;padding:28px 0 8px;">'
-            '<div style="font-size:2.2em;margin-bottom:10px;">♔</div>'
+            '<div style="padding:18px 0 6px;">'
             '<div style="font-size:1.3em;font-weight:700;color:#e2c97e;margin-bottom:6px;">'
-            'Welcome to BoardSense</div>'
-            '<div style="font-size:0.92em;color:#a0bccc;max-width:480px;margin:0 auto 4px;line-height:1.6;">'
+            '♔ Welcome to BoardSense</div>'
+            '<div style="font-size:1em;color:#a0bccc;line-height:1.6;">'
             'Enter your username to build a personalised coaching profile. We\'ll '
             'analyse your recent games and tailor everything — lessons, puzzles, '
             'and training — to your actual play.</div>'
@@ -9175,24 +10245,23 @@ def render_dashboard_tab():
             unsafe_allow_html=True,
         )
 
-        # Inline build form
-        _, fc, _ = st.columns([1, 2, 1])
-        with fc:
+        _ob_c1, _ob_c2, _ob_c3 = st.columns([2, 2, 1])
+        with _ob_c1:
             _ob_plat = st.radio(
                 "Platform", ["Chess.com", "Lichess"],
                 horizontal=True, key="onboard_platform",
             )
+        with _ob_c2:
             _ob_label = "Chess.com username" if _ob_plat == "Chess.com" else "Lichess username"
             _ob_placeholder = "e.g., magnuscarlsen" if _ob_plat == "Chess.com" else "e.g., DrNykterstein"
             _ob_user = st.text_input(_ob_label, value="", key="onboard_username",
                                      placeholder=_ob_placeholder)
-            _ob_est = _estimate_analysis_time(2, 12)
-            st.caption(f"~2 months of games at standard depth ({_ob_est})")
+        with _ob_c3:
+            st.markdown('<div style="height:25px;"></div>', unsafe_allow_html=True)
             if st.button(
                 "Build My Profile", type="primary",
                 use_container_width=True, disabled=not _ob_user.strip(),
             ):
-                # Pre-fill Profile tab inputs and navigate
                 st.session_state.profile_platform = _ob_plat
                 st.session_state.profile_username = _ob_user.strip().lower()
                 st.session_state.profile_months = 2
@@ -9201,52 +10270,13 @@ def render_dashboard_tab():
                 st.session_state.navigate_to_profile = True
                 st.rerun()
 
-        st.markdown('<div style="height:18px;"></div>', unsafe_allow_html=True)
-
-        # What you'll unlock
         st.markdown(
-            '<div style="text-align:center;font-size:0.78em;font-weight:700;color:#5a7ac8;'
-            'letter-spacing:0.06em;margin-bottom:12px;">WHAT YOU\'LL UNLOCK</div>',
-            unsafe_allow_html=True,
-        )
-        uc1, uc2, uc3, uc4 = st.columns(4)
-        _card = (
-            '<div style="background:#0f1923;border:1px solid #1e2e3e;border-radius:10px;'
-            'padding:16px 12px;text-align:center;height:100%;">'
-            '<div style="font-size:1.3em;margin-bottom:6px;">{icon}</div>'
-            '<div style="font-size:0.82em;font-weight:700;color:#cce0f4;margin-bottom:4px;">{title}</div>'
-            '<div style="font-size:0.76em;color:#8a9eb5;line-height:1.5;">{desc}</div></div>'
-        )
-        with uc1:
-            st.markdown(_card.format(
-                icon="📊", title="Skill Analysis",
-                desc="See exactly where you lose rating points",
-            ), unsafe_allow_html=True)
-        with uc2:
-            st.markdown(_card.format(
-                icon="📖", title="Custom Lessons",
-                desc="AI lessons built from your own mistakes",
-            ), unsafe_allow_html=True)
-        with uc3:
-            st.markdown(_card.format(
-                icon="🧩", title="Your Puzzles",
-                desc="Positions from games you actually played",
-            ), unsafe_allow_html=True)
-        with uc4:
-            st.markdown(_card.format(
-                icon="🎯", title="Training Plan",
-                desc="Curriculum adapted to your weaknesses",
-            ), unsafe_allow_html=True)
-
-        # Options for users without an account
-        st.markdown(
-            '<div style="text-align:center;margin-top:20px;">'
-            '<span style="font-size:0.82em;color:#7a9ab0;">'
+            '<div style="font-size:0.9em;color:#7a9ab0;margin-bottom:8px;">'
             'Don\'t have an online chess account? You can still '
             '<strong style="color:#a0bccc;">review any game</strong> '
             'by uploading a PGN in the Game Review tab, or '
             '<strong style="color:#a0bccc;">chat with the AI coach</strong> '
-            'in Learn &rarr; Ask Coach.</span></div>',
+            'in Learn &rarr; Ask Coach.</div>',
             unsafe_allow_html=True,
         )
 
@@ -9260,63 +10290,175 @@ def render_dashboard_tab():
     _losses = record.get("losses", 0)
     _draws = record.get("draws", 0)
     _total_games = _wins + _losses + _draws
-
+    _dash_skills = compute_skill_scores(summaries)
+    _win_rate = round(100 * _wins / _total_games, 1) if _total_games else 0
     _blunders_pg = profile.get("blunders_per_game", 0)
     _mistakes_pg = profile.get("mistakes_per_game", 0)
-
-    _dash_skills = compute_skill_scores(summaries)
-
-    # Win rate
-    _win_rate = round(100 * _wins / _total_games, 1) if _total_games else 0
-
-    # Best skill
     if _dash_skills:
         _best_skill_name = max(_dash_skills, key=_dash_skills.get)
         _best_skill_val = _dash_skills[_best_skill_name]
-        _best_skill_label = _best_skill_name.upper()
     else:
+        _best_skill_name = "—"
         _best_skill_val = 0
-        _best_skill_label = "BEST SKILL"
-
-    # Previous build record for donut delta (new vs old games)
-    _hist = db.get_profile_history(username)
-    _prev_record = {}
-    if len(_hist) >= 2:
-        _prev_record = _hist[-2].get("record", {})
-    elif len(_hist) == 1:
-        _prev_record = _hist[0].get("record", {})
-    _prev_w = _prev_record.get("wins", 0)
-    _prev_l = _prev_record.get("losses", 0)
-    _prev_d = _prev_record.get("draws", 0)
-    # New games since last build (only if previous data exists)
-    _has_delta = bool(_prev_record) and (_wins > _prev_w or _losses > _prev_l or _draws > _prev_d)
-    _new_w = max(0, _wins - _prev_w) if _has_delta else 0
-    _new_l = max(0, _losses - _prev_l) if _has_delta else 0
-    _new_d = max(0, _draws - _prev_d) if _has_delta else 0
-    _old_w = _wins - _new_w
-    _old_l = _losses - _new_l
-    _old_d = _draws - _new_d
 
     # ── Welcome header (slim, left-aligned) with streak ───────────────────
     _streak = st.session_state.get("_login_streak", {})
     _streak_cur = _streak.get("current", 0)
     _streak_html = ""
     if _streak_cur > 0:
-        _streak_color = "#e2c97e" if _streak_cur >= 7 else "#81c784" if _streak_cur >= 3 else "#5a8ab0"
+        if _streak_cur >= 30:
+            _streak_color, _streak_rank, _streak_bg = "#ffd700", "Master", "#2a2000"
+        elif _streak_cur >= 14:
+            _streak_color, _streak_rank, _streak_bg = "#e2c97e", "Expert", "#221c08"
+        elif _streak_cur >= 7:
+            _streak_color, _streak_rank, _streak_bg = "#81c784", "Dedicated", "#0c1e0e"
+        elif _streak_cur >= 3:
+            _streak_color, _streak_rank, _streak_bg = "#4fc3f7", "Rising", "#081828"
+        else:
+            _streak_color, _streak_rank, _streak_bg = "#5a8ab0", "", ""
+        _rank_text = f' · {_streak_rank}' if _streak_rank else ""
         _streak_html = (
-            f'<span style="font-size:0.78em;color:{_streak_color};font-weight:600;'
-            f'margin-left:10px;">'
-            f'\U0001f525 {_streak_cur} day streak</span>'
+            f'<span class="streak-badge" style="color:{_streak_color};'
+            f'background:{_streak_bg};border:1px solid {_streak_color}33;margin-left:10px;">'
+            f'\U0001f525 {_streak_cur} day streak{_rank_text}</span>'
         )
     st.markdown(
-        f'<div style="display:flex;align-items:baseline;justify-content:space-between;'
-        f'margin:14px 0 12px;padding:0 2px;">'
+        f'<div style="display:flex;align-items:center;justify-content:space-between;'
+        f'margin:10px 0 8px;padding:8px 14px;background:#0d1525;border:1px solid #1a2535;'
+        f'border-radius:10px;">'
         f'<span style="font-size:1.1em;font-weight:700;color:#cce0f4;">Welcome back, '
         f'<span style="color:#e2c97e;">{username}</span>{_streak_html}</span>'
-        f'<span style="font-size:0.82em;color:#7a9ab0;">{_total_games} games analysed</span>'
+        f'<span style="font-size:0.82em;color:#5a7a8a;font-weight:600;letter-spacing:0.04em;">'
+        f'{_total_games} games analysed</span>'
         f'</div>',
         unsafe_allow_html=True,
     )
+
+    # ── Compact stat row ─────────────────────────────────────────────────
+    _wr_color = "#81c784" if _win_rate >= 55 else "#ffb74d" if _win_rate >= 45 else "#e57373"
+    _bs_color = "#81c784" if _best_skill_val >= 70 else "#ffb74d" if _best_skill_val >= 45 else "#e57373"
+    _stat_style = (
+        'display:inline-flex;flex-direction:column;align-items:center;'
+        'padding:12px 0;flex:1;'
+    )
+    _stat_divider = '<div style="width:1px;background:#1e2e3e;margin:8px 0;"></div>'
+    _num_style = 'font-size:1.4em;font-weight:800;letter-spacing:-0.02em;'
+    st.markdown(
+        f'<div class="stat-card" style="display:flex;background:#111827;border:1px solid #1e2e3e;'
+        f'border-radius:10px;padding:4px 8px;margin-bottom:12px;text-align:center;">'
+        f'<div style="{_stat_style}">'
+        f'<span style="{_num_style}color:{_wr_color};text-shadow:0 0 12px {_wr_color}44;">{_win_rate}%</span>'
+        f'<span style="font-size:0.72em;color:#5a7a8a;font-weight:700;letter-spacing:0.08em;margin-top:2px;">WIN RATE</span></div>'
+        f'{_stat_divider}'
+        f'<div style="{_stat_style}">'
+        f'<span style="{_num_style}color:#cce0f4;">'
+        f'{_wins}<span style="color:#3a5a6a;font-size:0.5em;"> / </span>'
+        f'{_losses}<span style="color:#3a5a6a;font-size:0.5em;"> / </span>{_draws}</span>'
+        f'<span style="font-size:0.72em;color:#5a7a8a;font-weight:700;letter-spacing:0.08em;margin-top:2px;">W / L / D</span></div>'
+        f'{_stat_divider}'
+        f'<div style="{_stat_style}">'
+        f'<span style="{_num_style}color:#fff176;text-shadow:0 0 12px #fff17633;">{_mistakes_pg}</span>'
+        f'<span style="font-size:0.72em;color:#5a7a8a;font-weight:700;letter-spacing:0.08em;margin-top:2px;">MISTAKES/G</span></div>'
+        f'{_stat_divider}'
+        f'<div style="{_stat_style}">'
+        f'<span style="{_num_style}color:#e57373;text-shadow:0 0 12px #e5737333;">{_blunders_pg}</span>'
+        f'<span style="font-size:0.72em;color:#5a7a8a;font-weight:700;letter-spacing:0.08em;margin-top:2px;">BLUNDERS/G</span></div>'
+        f'{_stat_divider}'
+        f'<div style="{_stat_style}">'
+        f'<span style="{_num_style}color:{_bs_color};text-shadow:0 0 12px {_bs_color}44;">{_best_skill_val}</span>'
+        f'<span style="font-size:0.72em;color:#5a7a8a;font-weight:700;letter-spacing:0.08em;margin-top:2px;">{_best_skill_name.upper()}</span></div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── Progress Since Last Build ─────────────────────────────────────────
+    _ph = db.get_profile_history(username)
+    if len(_ph) >= 2:
+        _prev_entry = _ph[-2]
+        _curr_skills = compute_skill_scores(st.session_state.get("profile_summaries", []))
+        _prev_skills_raw = _prev_entry.get("skill_ratings", {})
+        # Normalise: skill_ratings may be {"Tactics": 65} or {"Tactics": {"rating": 65}}
+        _prev_skills = {}
+        for _sk_cat in _SKILL_CATS:
+            _sk_val = _prev_skills_raw.get(_sk_cat, None)
+            if isinstance(_sk_val, dict):
+                _prev_skills[_sk_cat] = _sk_val.get("rating", 50)
+            elif isinstance(_sk_val, (int, float)):
+                _prev_skills[_sk_cat] = int(_sk_val)
+            else:
+                _prev_skills[_sk_cat] = None
+        # Overall accuracy delta
+        _curr_acc = profile.get("average_accuracy") or profile.get("overall_accuracy")
+        _prev_acc = _prev_entry.get("overall_acc")
+        # Format previous build date
+        _prev_built = _prev_entry.get("built_at", "")
+        try:
+            from datetime import datetime as _dt_cls
+            _prev_dt = _dt_cls.fromisoformat(_prev_built.replace("Z", "+00:00"))
+            _prev_date_str = _prev_dt.strftime("%b %d, %Y").lstrip("0").replace(" 0", " ")
+        except Exception:
+            try:
+                _prev_date_str = str(_prev_built)[:10]
+            except Exception:
+                _prev_date_str = _prev_built[:10] if len(_prev_built) >= 10 else "previous"
+
+        # Build delta chips HTML
+        _delta_chips = []
+        for _sk_cat in _SKILL_CATS:
+            _c_val = _curr_skills.get(_sk_cat, 50)
+            _p_val = _prev_skills.get(_sk_cat)
+            if _p_val is None:
+                continue
+            _diff = _c_val - _p_val
+            if _diff > 0:
+                _d_color = "#81c784"
+                _d_text = f"+{_diff}"
+            elif _diff < 0:
+                _d_color = "#e57373"
+                _d_text = str(_diff)
+            else:
+                _d_color = "#7a9ab0"
+                _d_text = "0"
+            _delta_chips.append(
+                f'<span style="display:inline-block;margin:3px 6px 3px 0;">'
+                f'<span style="color:#8899aa;font-size:0.82em;">{_sk_cat}: </span>'
+                f'<span style="color:{_d_color};font-weight:700;font-size:0.92em;">{_d_text}</span>'
+                f'</span>'
+            )
+
+        # Overall accuracy chip
+        _acc_chip = ""
+        if _curr_acc is not None and _prev_acc is not None:
+            _acc_diff = round(_curr_acc - _prev_acc, 1)
+            if _acc_diff > 0:
+                _acc_color = "#81c784"
+                _acc_text = f"+{_acc_diff}%"
+            elif _acc_diff < 0:
+                _acc_color = "#e57373"
+                _acc_text = f"{_acc_diff}%"
+            else:
+                _acc_color = "#7a9ab0"
+                _acc_text = "0%"
+            _acc_chip = (
+                f'<span style="display:inline-block;margin:3px 6px 3px 0;">'
+                f'<span style="color:#8899aa;font-size:0.82em;">Overall Acc: </span>'
+                f'<span style="color:{_acc_color};font-weight:700;font-size:0.92em;">{_acc_text}</span>'
+                f'</span>'
+            )
+
+        _chips_html = " ".join(_delta_chips)
+        if _acc_chip:
+            _chips_html = _acc_chip + _chips_html
+
+        st.markdown(_section_header("Progress Since Last Build", "#81c784", icon="\U0001f4c8"), unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="bs-card" style="margin-bottom:14px;">'
+            f'<div style="margin-bottom:8px;">{_chips_html}</div>'
+            f'<div style="font-size:0.75em;color:#5a7a8a;font-style:italic;">'
+            f'vs. build from {_prev_date_str}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
     # ── Recommended Next Step ─────────────────────────────────────────────
     _next_action = None
@@ -9327,8 +10469,8 @@ def render_dashboard_tab():
     _rd = db.get_review_due_concepts(_current_user(), days=3, threshold=0.8)
     if _rd:
         _next_action = f"Review: {_rd[0]['concept']} — scored {_rd[0]['score']}/{_rd[0]['total']} last time"
-        _next_nav = "navigate_to_coaching"
-        _next_nav_concept = _rd[0]["concept"]
+        _next_nav = "navigate_to_spaced_review"
+        _next_nav_concept = None
     else:
         # Check concept mastery — find weakest practiced concept
         _cm_all = st.session_state.get("_concept_mastery_cache")
@@ -9358,32 +10500,32 @@ def render_dashboard_tab():
                 _next_nav = "navigate_to_training"
 
     if _next_action:
-        st.markdown(
-            f'<div style="background:#0d1525;border:1px solid #2a4a6a;border-left:3px solid #5a7ac8;'
-            f'border-radius:8px;padding:12px 16px;margin-bottom:12px;">'
-            f'<div style="font-size:0.68em;color:#5a7ac8;font-weight:700;'
-            f'letter-spacing:0.06em;margin-bottom:4px;">RECOMMENDED NEXT STEP</div>'
-            f'<div style="font-size:0.92em;color:#cce0f4;font-weight:600;">{_next_action}</div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-        if _next_nav and st.button("Go →", key="dash_next_step"):
-            if _next_nav_concept:
-                st.session_state.selected_concept = _next_nav_concept
-            st.session_state[_next_nav] = True
-            st.rerun()
+        _ns_left, _ns_right = st.columns([5, 1])
+        with _ns_left:
+            st.markdown(
+                f'<div class="next-step-card" style="background:#0d1525;border:1px solid #2a4a6a;border-left:3px solid #5a7ac8;'
+                f'border-radius:8px;padding:12px 16px;">'
+                f'<div style="font-size:0.72em;color:#5a7ac8;font-weight:700;'
+                f'letter-spacing:0.08em;margin-bottom:4px;">RECOMMENDED NEXT STEP</div>'
+                f'<div style="font-size:1em;color:#cce0f4;font-weight:600;">{_next_action}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        with _ns_right:
+            st.markdown('<div style="height:8px;"></div>', unsafe_allow_html=True)
+            if _next_nav and st.button("Go →", key="dash_next_step", use_container_width=True):
+                if _next_nav_concept:
+                    st.session_state.selected_concept = _next_nav_concept
+                st.session_state[_next_nav] = True
+                st.rerun()
 
     # ── Daily Goals ──────────────────────────────────────────────────────────
     _dg_targets, _dg_progress = _get_daily_goals()
-    st.markdown(
-        '<div style="font-size:0.7em;color:#4a6080;font-weight:700;letter-spacing:0.1em;'
-        'text-transform:uppercase;margin:10px 0 10px;">DAILY GOALS</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown(_section_header("Daily Goals", "#4a6080", first=True), unsafe_allow_html=True)
     _dg_items = [
         ("Puzzles", "puzzles", "\U0001f9e9", "#4fc3f7", "navigate_to_puzzles"),
         ("Lessons", "lessons", "\U0001f4d6", "#81c784", "navigate_to_coaching"),
-        ("Reviews", "review", "\U0001f50d", "#ffb74d", "navigate_to_review"),
+        ("Reviews", "review", "\U0001f50d", "#ffb74d", "navigate_to_spaced_review"),
     ]
     _dg_cols = st.columns(len(_dg_items))
     for _dg_i, (_dg_label, _dg_key, _dg_icon, _dg_color, _dg_nav) in enumerate(_dg_items):
@@ -9401,263 +10543,58 @@ def render_dashboard_tab():
                 st.session_state[_dg_nav] = True
                 st.rerun()
             # Progress bar sits underneath the button
+            _dg_glow_cls = " goal-bar-complete" if _dg_pct >= 100 else ""
+            _dg_bar_bg = f"linear-gradient(90deg, {_dg_color}cc, {_dg_color})" if _dg_pct < 100 else f"linear-gradient(90deg, {_dg_color}, #a5d6a7)"
             st.markdown(
-                f'<div style="height:4px;background:#1e2e3e;border-radius:0 0 3px 3px;'
+                f'<div class="{_dg_glow_cls}" style="height:4px;background:#1e2e3e;border-radius:0 0 3px 3px;'
                 f'margin-top:-8px;overflow:hidden;">'
-                f'<div style="width:{_dg_pct}%;height:100%;background:{_dg_color};'
-                f'border-radius:3px;transition:width 0.3s;"></div></div>',
+                f'<div style="width:{_dg_pct}%;height:100%;background:{_dg_bar_bg};'
+                f'border-radius:3px;transition:width 0.4s ease;"></div></div>',
                 unsafe_allow_html=True,
             )
 
-    # ── Session Analytics ──────────────────────────────────────────────────
-    _render_session_analytics()
-
-    # ── Achievements ──────────────────────────────────────────────────────────
+    # ── Achievements + Session Analytics (collapsed) ─────────────────────
     _unlocked = db.get_achievements(_current_user())
-    st.markdown(
-        '<div style="font-size:0.7em;color:#4a6080;font-weight:700;letter-spacing:0.1em;'
-        'text-transform:uppercase;margin:16px 0 10px;">ACHIEVEMENTS</div>',
-        unsafe_allow_html=True,
-    )
-    _ach_count = len(_ACHIEVEMENTS)
-    # Use responsive grid — auto-fill to handle the growing achievements list
-    _ach_html = (
-        f'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:8px;">'
-    )
-    for _ach_key, _ach_def in _ACHIEVEMENTS.items():
-        if _ach_key in _unlocked:
-            _ach_date = _unlocked[_ach_key][:10] if _unlocked[_ach_key] else ""
-            _ach_html += (
-                f'<div style="background:#111827;border:1px solid #2a4a6a;border-radius:10px;'
-                f'padding:10px 8px;text-align:center;">'
-                f'<div style="font-size:1.4em;">{_ach_def["icon"]}</div>'
-                f'<div style="font-size:0.68em;font-weight:700;color:#cce0f4;margin-top:4px;'
-                f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'
-                f'{_ach_def["name"]}</div>'
-                f'<div style="font-size:0.62em;color:#5a7a8a;">{_ach_date}</div>'
-                f'</div>'
-            )
-        else:
-            _ach_html += (
-                f'<div style="background:#0a0e18;border:1px solid #1a2030;border-radius:10px;'
-                f'padding:10px 8px;text-align:center;opacity:0.4;">'
-                f'<div style="font-size:1.4em;">\U0001f512</div>'
-                f'<div style="font-size:0.68em;font-weight:700;color:#5a6a7a;margin-top:4px;">???</div>'
-                f'</div>'
-            )
-    _ach_html += '</div>'
-    st.markdown(_ach_html, unsafe_allow_html=True)
-
-    # ── Group header: PERFORMANCE ──────────────────────────────────────────
-    st.markdown(
-        '<div style="font-size:0.7em;color:#4a6080;font-weight:700;letter-spacing:0.1em;'
-        'text-transform:uppercase;margin:10px 0 6px;">PERFORMANCE</div>',
-        unsafe_allow_html=True,
-    )
-
-    # ── Hero row — radar + donut (left) | stats (right) ──────────────────
-    _hero_left, _hero_right = st.columns([3, 2], gap="small")
-
-    with _hero_left:
-        # Skill Radar header with styled info popover
-        st.markdown(
-            '<style>'
-            '.sr-tip{position:relative;display:inline-flex;align-items:center;justify-content:center;'
-            'width:18px;height:18px;border-radius:50%;border:1.5px solid #3a5a8a;color:#7ab3d4;'
-            'font-size:0.7em;font-weight:700;cursor:help;transition:border-color .2s;}'
-            '.sr-tip:hover{border-color:#7ab3d4;}'
-            '.sr-tip .sr-pop{visibility:hidden;opacity:0;position:absolute;left:24px;top:-8px;'
-            'width:280px;background:#0d1923;border:1px solid #1e3a5a;border-radius:8px;'
-            'padding:12px 14px;z-index:100;transition:opacity .15s;pointer-events:none;'
-            'box-shadow:0 4px 16px rgba(0,0,0,.4);}'
-            '.sr-tip:hover .sr-pop{visibility:visible;opacity:1;}'
-            '.sr-pop b{color:#cce0f4;}.sr-pop span{color:#a0bccc;font-size:0.82em;line-height:1.6;}'
-            '</style>'
-            '<div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">'
-            '<span style="font-size:0.82em;color:#5a7ac8;font-weight:700;letter-spacing:0.06em;">'
-            'SKILL RADAR</span>'
-            '<div class="sr-tip">i<div class="sr-pop"><span>'
-            '<b>Opening Prep</b> — How well you play moves 1–12. Covers theory, development, and early plans.<br>'
-            '<b>Middlegame</b> — Your strength in moves 13–30, where most tactical and strategic battles happen.<br>'
-            '<b>Endgame</b> — Precision in simplified positions (move 31+). Technique matters most here.<br>'
-            '<b>Tactics</b> — How clean your play is. Fewer blunders and mistakes means a higher score.<br>'
-            '<b>Consistency</b> — How steady you perform game to game. Less variance = more reliable play.'
-            '</span></div></div>'
-            '</div>',
-            unsafe_allow_html=True,
+    _ach_unlocked_count = len(_unlocked)
+    _ach_total_count = len(_ACHIEVEMENTS)
+    with st.expander(f"Achievements ({_ach_unlocked_count}/{_ach_total_count}) & Session"):
+        _ach_html = (
+            '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:8px;">'
         )
+        for _ach_key, _ach_def in _ACHIEVEMENTS.items():
+            if _ach_key in _unlocked:
+                _ach_date = _unlocked[_ach_key][:10] if _unlocked[_ach_key] else ""
+                _ach_html += (
+                    f'<div class="ach-unlocked" style="border:1px solid #2a4a6a;border-radius:10px;'
+                    f'padding:10px 8px;text-align:center;">'
+                    f'<div style="font-size:1.5em;filter:drop-shadow(0 0 4px rgba(255,215,0,0.3));">{_ach_def["icon"]}</div>'
+                    f'<div style="font-size:0.78em;font-weight:700;color:#e2c97e;margin-top:4px;'
+                    f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'
+                    f'{_ach_def["name"]}</div>'
+                    f'<div style="font-size:0.72em;color:#7a9ab0;">{_ach_date}</div>'
+                    f'</div>'
+                )
+            else:
+                _ach_html += (
+                    f'<div style="background:#0a0e18;border:1px solid #1a2030;border-radius:10px;'
+                    f'padding:10px 8px;text-align:center;opacity:0.4;">'
+                    f'<div style="font-size:1.4em;">\U0001f512</div>'
+                    f'<div style="font-size:0.78em;font-weight:700;color:#5a6a7a;margin-top:4px;">???</div>'
+                    f'</div>'
+                )
+        _ach_html += '</div>'
+        st.markdown(_ach_html, unsafe_allow_html=True)
+        _render_session_analytics()
 
-        # Skill Radar chart
-        _score_vals = [_dash_skills.get(c, 50) for c in _SKILL_CATS]
-
-        import plotly.graph_objects as _go_dash
-        _radar = _go_dash.Figure(_go_dash.Scatterpolar(
-            r=_score_vals + [_score_vals[0]],
-            theta=_SKILL_CATS + [_SKILL_CATS[0]],
-            fill="toself",
-            fillcolor="rgba(74,106,170,0.18)",
-            line=dict(color="#4a6aaa", width=2),
-            marker=dict(size=6, color="#7ab3d4"),
-            hovertemplate="%{theta}: %{r}<extra></extra>",
-        ))
-        _radar.update_layout(
-            polar=dict(
-                radialaxis=dict(visible=True, range=[0, 100], tickvals=[25, 50, 75, 100],
-                                gridcolor="#1e2e3e", linecolor="#1e2e3e",
-                                tickfont=dict(color="#7a9ab0", size=9)),
-                angularaxis=dict(gridcolor="#1e2e3e", linecolor="#1e2e3e",
-                                 tickfont=dict(color="#cce0f4", size=11)),
-                bgcolor="#0d1117",
-            ),
-            paper_bgcolor="#0d1117", height=260,
-            margin=dict(l=50, r=50, t=18, b=18), showlegend=False,
-        )
-        st.plotly_chart(_radar, use_container_width=True, config={"displayModeBar": False})
-
-        # Win Rate Donut chart — old vs new segments
-        if _has_delta:
-            _donut_labels = ["Wins", "New Wins", "Losses", "New Losses", "Draws", "New Draws"]
-            _donut_values = [_old_w, _new_w, _old_l, _new_l, _old_d, _new_d]
-            _donut_colors = ["#81c784", "#2e7d32", "#e57373", "#b71c1c", "#78909c", "#455a64"]
-        else:
-            _donut_labels = ["Wins", "Losses", "Draws"]
-            _donut_values = [_wins, _losses, _draws]
-            _donut_colors = ["#81c784", "#e57373", "#78909c"]
-        _donut = _go_dash.Figure(_go_dash.Pie(
-            labels=_donut_labels,
-            values=_donut_values,
-            hole=0.65,
-            marker=dict(colors=_donut_colors),
-            textinfo="none",
-            hovertemplate="%{label}: %{value} (%{percent})<extra></extra>",
-            sort=False,
-        ))
-        _donut.update_layout(
-            paper_bgcolor="#0d1117", height=180,
-            margin=dict(l=10, r=10, t=10, b=10), showlegend=False,
-            annotations=[dict(
-                text=f"<b>{_total_games}</b>",
-                x=0.5, y=0.5, font=dict(size=22, color="#cce0f4"),
-                showarrow=False,
-            )],
-        )
-        st.plotly_chart(_donut, use_container_width=True, config={"displayModeBar": False})
-        # Inline legend
-        if _has_delta:
-            st.markdown(
-                f'<div style="text-align:center;font-size:0.78em;color:#a0bccc;margin-top:-8px;">'
-                f'<span style="color:#81c784;">●</span> {_old_w}W '
-                f'<span style="color:#2e7d32;">●</span> +{_new_w} &nbsp;&nbsp;'
-                f'<span style="color:#e57373;">●</span> {_old_l}L '
-                f'<span style="color:#b71c1c;">●</span> +{_new_l} &nbsp;&nbsp;'
-                f'<span style="color:#78909c;">●</span> {_old_d}D '
-                f'<span style="color:#455a64;">●</span> +{_new_d}</div>',
-                unsafe_allow_html=True,
-            )
-        else:
-            st.markdown(
-                f'<div style="text-align:center;font-size:0.78em;color:#a0bccc;margin-top:-8px;">'
-                f'<span style="color:#81c784;">●</span> {_wins}W &nbsp;&nbsp;'
-                f'<span style="color:#e57373;">●</span> {_losses}L &nbsp;&nbsp;'
-                f'<span style="color:#78909c;">●</span> {_draws}D</div>',
-                unsafe_allow_html=True,
-            )
-
-    with _hero_right:
-        # Trend badge helper — compare current vs previous profile_history entry
-        _wr_trend_html = ""
-        _acc_trend_html = ""
-        if len(_hist) >= 2:
-            # Win rate trend
-            _prev_rec = _hist[-2].get("record", {})
-            _prev_total = sum(_prev_rec.get(k, 0) for k in ("wins", "losses", "draws"))
-            if _prev_total > 0:
-                _prev_wr = round(100 * _prev_rec.get("wins", 0) / _prev_total, 1)
-                _wr_delta = round(_win_rate - _prev_wr, 1)
-                if _wr_delta != 0:
-                    _wr_arrow = "▲" if _wr_delta > 0 else "▼"
-                    _wr_tc = "#81c784" if _wr_delta > 0 else "#e57373"
-                    _wr_trend_html = (
-                        f'<div style="font-size:0.68em;color:{_wr_tc};font-weight:600;margin-top:4px;">'
-                        f'{_wr_arrow} {abs(_wr_delta):+.1f}%</div>'
-                    )
-            # Accuracy trend (overall_acc from last two history entries)
-            _cur_acc = _hist[-1].get("overall_acc")
-            _prev_acc = _hist[-2].get("overall_acc")
-            if _cur_acc is not None and _prev_acc is not None:
-                _acc_delta = round(_cur_acc - _prev_acc, 1)
-                if _acc_delta != 0:
-                    _acc_arrow = "▲" if _acc_delta > 0 else "▼"
-                    _acc_tc = "#81c784" if _acc_delta > 0 else "#e57373"
-                    _acc_trend_html = (
-                        f'<div style="font-size:0.68em;color:{_acc_tc};font-weight:600;margin-top:4px;">'
-                        f'{_acc_arrow} {abs(_acc_delta):+.1f}% acc</div>'
-                    )
-
-        # Win Rate hero card
-        _wr_color = "#81c784" if _win_rate >= 55 else "#ffb74d" if _win_rate >= 45 else "#e57373"
-        st.markdown(
-            f'<div style="background:#0f1923;border:1px solid #1e2e3e;border-radius:10px;'
-            f'padding:12px 12px;text-align:center;margin-bottom:8px;">'
-            f'<div style="font-size:0.72em;color:#7a9ab0;font-weight:600;letter-spacing:0.06em;'
-            f'margin-bottom:6px;">WIN RATE</div>'
-            f'<div style="font-size:2.4em;font-weight:800;color:{_wr_color};">{_win_rate}%</div>'
-            f'{_wr_trend_html}'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-
-        # Mistakes / Game + Blunders / Game side-by-side
-        _mc1, _mc2 = st.columns(2)
-        with _mc1:
-            st.markdown(
-                f'<div style="background:#0f1923;border:1px solid #1e2e3e;border-radius:10px;'
-                f'padding:14px 10px;text-align:center;">'
-                f'<div style="font-size:1.4em;font-weight:800;color:#fff176;">{_mistakes_pg}</div>'
-                f'<div style="font-size:0.68em;color:#7a9ab0;font-weight:600;letter-spacing:0.04em;'
-                f'margin-top:3px;">MISTAKES / GAME</div></div>',
-                unsafe_allow_html=True,
-            )
-        with _mc2:
-            st.markdown(
-                f'<div style="background:#0f1923;border:1px solid #1e2e3e;border-radius:10px;'
-                f'padding:14px 10px;text-align:center;">'
-                f'<div style="font-size:1.4em;font-weight:800;color:#ef5350;">{_blunders_pg}</div>'
-                f'<div style="font-size:0.68em;color:#7a9ab0;font-weight:600;letter-spacing:0.04em;'
-                f'margin-top:3px;">BLUNDERS / GAME</div></div>',
-                unsafe_allow_html=True,
-            )
-
-        st.markdown('<div style="height:8px;"></div>', unsafe_allow_html=True)
-
-        # Best Skill card
-        _bs_color = "#81c784" if _best_skill_val >= 70 else "#ffb74d" if _best_skill_val >= 45 else "#e57373"
-        st.markdown(
-            f'<div style="background:#0f1923;border:1px solid #1e2e3e;border-radius:10px;'
-            f'padding:16px 14px;text-align:center;">'
-            f'<div style="font-size:0.72em;color:#7a9ab0;font-weight:600;letter-spacing:0.06em;'
-            f'margin-bottom:4px;">BEST SKILL · {_best_skill_label}</div>'
-            f'<div style="font-size:2em;font-weight:800;color:{_bs_color};">{_best_skill_val}</div>'
-            f'{_acc_trend_html}'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-
-    st.markdown('<div style="height:4px;"></div>', unsafe_allow_html=True)
-
-    # ── Group header: RECOMMENDED FOR YOU ──────────────────────────────────
-    st.markdown(
-        '<div style="border-top:1px solid #1e2e3e;padding-top:12px;margin-top:4px;">'
-        '<span style="font-size:0.7em;color:#4a6080;font-weight:700;letter-spacing:0.1em;'
-        'text-transform:uppercase;">RECOMMENDED FOR YOU</span></div>',
-        unsafe_allow_html=True,
-    )
+    # ── RECOMMENDED FOR YOU ───────────────────────────────────────────────
+    st.markdown(_section_header("Recommended For You", "#4a6080"), unsafe_allow_html=True)
 
     # ── Action Cards Row (3 equal columns) ────────────────────────────────
     _card_style = (
-        'background:#0f1923;border:1px solid #1e2e3e;border-radius:10px;'
-        'padding:16px 14px;height:170px;overflow:hidden;'
+        'background:#111827;border:1px solid #1e2e3e;border-radius:10px;'
+        'padding:16px 14px;'
     )
+    _card_cls = 'action-card'
     _ac1, _ac2, _ac3 = st.columns(3)
 
     # Today's Recommendation
@@ -9671,26 +10608,25 @@ def render_dashboard_tab():
                 mod = get_module(top_rec["module_id"])
                 if mod:
                     _rec_html = (
-                        f'<div style="font-size:0.95em;font-weight:700;color:#cce0f4;'
+                        f'<div style="font-size:1em;font-weight:700;color:#cce0f4;'
                         f'margin-bottom:4px;">{mod.get("title", top_rec["module_id"])}</div>'
-                        f'<div style="font-size:0.78em;color:#a0bccc;line-height:1.5;">'
+                        f'<div style="font-size:0.88em;color:#a0bccc;line-height:1.5;">'
                         f'{mod.get("description", "")}</div>'
                     )
         except Exception:
             pass
         if not _rec_html:
             _rec_html = (
-                '<div style="font-size:0.85em;color:#7a9ab0;padding:8px 0;">'
+                '<div style="font-size:0.92em;color:#7a9ab0;padding:8px 0;">'
                 'Build more games for recommendations</div>'
             )
         st.markdown(
-            f'<div style="{_card_style}border-left:3px solid #5a7ac8;">'
-            f'<div><div style="font-size:0.72em;color:#5a7ac8;font-weight:700;'
+            f'<div class="{_card_cls}" style="{_card_style}border-left:3px solid #5a7ac8;">'
+            f'<div><div style="font-size:0.82em;color:#5a7ac8;font-weight:700;'
             f'letter-spacing:0.06em;margin-bottom:8px;">RECOMMENDED</div>'
             f'{_rec_html}</div></div>',
             unsafe_allow_html=True,
         )
-        st.markdown('<div style="height:6px;"></div>', unsafe_allow_html=True)
         if st.button("Start →", key="dash_rec_start"):
             st.session_state.navigate_to_training = True
             st.rerun()
@@ -9701,23 +10637,22 @@ def render_dashboard_tab():
         if _focus_areas:
             _fa_items = "".join(
                 f'<div style="background:#1a1520;border:1px solid #3a2a3a;border-radius:6px;'
-                f'padding:6px 10px;margin-bottom:5px;font-size:0.85em;color:#cce0f4;'
+                f'padding:6px 10px;margin-bottom:5px;font-size:0.92em;color:#cce0f4;'
                 f'font-weight:600;">{c}</div>'
                 for c in _focus_areas[:3]
             )
         else:
             _fa_items = (
-                '<div style="font-size:0.85em;color:#7a9ab0;padding:8px 0;">'
+                '<div style="font-size:0.92em;color:#7a9ab0;padding:8px 0;">'
                 'No focus areas identified yet</div>'
             )
         st.markdown(
-            f'<div style="{_card_style}border-left:3px solid #e57373;">'
-            f'<div><div style="font-size:0.72em;color:#e57373;font-weight:700;'
+            f'<div class="{_card_cls}" style="{_card_style}border-left:3px solid #e57373;">'
+            f'<div><div style="font-size:0.82em;color:#e57373;font-weight:700;'
             f'letter-spacing:0.06em;margin-bottom:8px;">FOCUS AREAS</div>'
             f'{_fa_items}</div></div>',
             unsafe_allow_html=True,
         )
-        st.markdown('<div style="height:6px;"></div>', unsafe_allow_html=True)
         if st.button("Study →", key="dash_focus"):
             st.session_state.navigate_to_coaching = True
             st.rerun()
@@ -9735,46 +10670,44 @@ def render_dashboard_tab():
         if _stage_mods:
             _pct = round(100 * _stage_done / len(_stage_mods))
             _bar_color = "#81c784" if _pct >= 70 else "#ffb74d" if _pct >= 40 else "#5a7ac8"
+            _bar_glow = f"box-shadow:0 0 6px {_bar_color}44;" if _pct >= 70 else ""
             _courses_html = (
-                f'<div style="font-size:0.88em;font-weight:700;color:#cce0f4;margin-bottom:6px;">'
+                f'<div style="font-size:0.95em;font-weight:700;color:#cce0f4;margin-bottom:6px;">'
                 f'Stage {_cur_stage}: {_stage_info.get("name", "")}</div>'
-                f'<div style="background:#1a2535;border-radius:4px;height:8px;margin-bottom:6px;">'
-                f'<div style="width:{_pct}%;background:{_bar_color};border-radius:4px;height:8px;">'
+                f'<div style="background:#1a2535;border-radius:4px;height:8px;margin-bottom:6px;overflow:hidden;">'
+                f'<div style="width:{_pct}%;background:linear-gradient(90deg, {_bar_color}aa, {_bar_color});'
+                f'border-radius:4px;height:8px;{_bar_glow}transition:width 0.4s ease;">'
                 f'</div></div>'
-                f'<div style="font-size:0.78em;color:#a0bccc;">'
+                f'<div style="font-size:0.88em;color:#a0bccc;">'
                 f'{_stage_done}/{len(_stage_mods)} modules · {_completed_count} total completed</div>'
             )
         else:
             _courses_html = (
-                '<div style="font-size:0.85em;color:#7a9ab0;padding:8px 0;">'
+                '<div style="font-size:0.92em;color:#7a9ab0;padding:8px 0;">'
                 'Start training to track progress</div>'
             )
         # Check for review-due items and append a small note
         _review_due = db.get_review_due_concepts(_current_user(), days=3, threshold=0.8)
         if _review_due:
             _courses_html += (
-                f'<div style="font-size:0.72em;color:#ffb74d;margin-top:8px;font-weight:600;">'
+                f'<div style="font-size:0.82em;color:#ffb74d;margin-top:8px;font-weight:600;">'
                 f'{len(_review_due)} concept{"s" if len(_review_due) != 1 else ""} due for review</div>'
             )
         st.markdown(
-            f'<div style="{_card_style}border-left:3px solid #e2c97e;">'
-            f'<div><div style="font-size:0.72em;color:#e2c97e;font-weight:700;'
+            f'<div class="{_card_cls}" style="{_card_style}border-left:3px solid #e2c97e;">'
+            f'<div><div style="font-size:0.82em;color:#e2c97e;font-weight:700;'
             f'letter-spacing:0.06em;margin-bottom:8px;">COURSES</div>'
             f'{_courses_html}</div></div>',
             unsafe_allow_html=True,
         )
-        st.markdown('<div style="height:6px;"></div>', unsafe_allow_html=True)
         if _review_due:
             if st.button("Review Now →", key="dash_review_due"):
-                st.session_state.selected_concept = _review_due[0]["concept"]
-                st.session_state.navigate_to_coaching = True
+                st.session_state.navigate_to_spaced_review = True
                 st.rerun()
         else:
             if st.button("Continue →", key="dash_review_due"):
                 st.session_state.navigate_to_training = True
                 st.rerun()
-
-    st.markdown('<div style="height:6px;"></div>', unsafe_allow_html=True)
 
     # ── Recurring Vulnerabilities (pattern recognition across games) ──────
     if summaries:
@@ -9797,6 +10730,12 @@ def render_dashboard_tab():
                                     _vuln_counts.setdefault(_vc_name, []).append({
                                         "phase": _vcm.get("phase", "?"),
                                         "swing": abs(_vcm.get("eval_before", 0) - _vcm.get("eval_after", 0)),
+                                        "move_number": _vcm.get("move_number", "?"),
+                                        "color": _vcm.get("color", "white"),
+                                        "move_san": _vcm.get("move_san", "?"),
+                                        "best_move_san": _vcm.get("best_move_san", "?"),
+                                        "eval_before": _vcm.get("eval_before", 0),
+                                        "eval_after": _vcm.get("eval_after", 0),
                                     })
                             except Exception:
                                 pass
@@ -9809,97 +10748,80 @@ def render_dashboard_tab():
                         _v_phases[_vm["phase"]] = _v_phases.get(_vm["phase"], 0) + 1
                     _top_phase = max(_v_phases, key=_v_phases.get)
                     _avg_swing = sum(m["swing"] for m in _vms) / len(_vms)
+                    # Pick up to 2 examples with the largest swing for concrete display
+                    _examples = sorted(_vms, key=lambda m: m["swing"], reverse=True)[:2]
                     _vulns.append({
                         "concept": _vn, "count": len(_vms),
                         "top_phase": _top_phase, "avg_swing": _avg_swing,
+                        "examples": _examples,
                     })
             _vulns.sort(key=lambda v: v["count"] * v["avg_swing"], reverse=True)
             st.session_state[_vuln_cache_key] = _vulns[:5]
 
         _vulns_display = st.session_state.get(_vuln_cache_key, [])
         if _vulns_display:
-            st.markdown(
-                '<div style="border-top:1px solid #1e2e3e;padding-top:12px;margin-top:4px;">'
-                '<span style="font-size:0.7em;color:#e57373;font-weight:700;letter-spacing:0.1em;'
-                'text-transform:uppercase;">RECURRING VULNERABILITIES</span></div>',
-                unsafe_allow_html=True,
-            )
-            for _vd in _vulns_display:
+            st.markdown(_section_header("Recurring Vulnerabilities", "#e57373"), unsafe_allow_html=True)
+            for _vd_i, _vd in enumerate(_vulns_display):
                 _vd_sev = "#e57373" if _vd["avg_swing"] >= 2 else "#ffb74d" if _vd["avg_swing"] >= 1 else "#fff176"
+                _vd_sev_bg = "#1a0f0f" if _vd["avg_swing"] >= 2 else "#1a150f" if _vd["avg_swing"] >= 1 else "#1a1a0f"
                 st.markdown(
-                    f'<div style="background:#1a0f0f;border:1px solid #2e1a1a;border-radius:8px;'
-                    f'padding:10px 14px;margin-bottom:6px;display:flex;'
+                    f'<div style="background:{_vd_sev_bg};border:1px solid #2e1a1a;border-left:3px solid {_vd_sev};'
+                    f'border-radius:8px;padding:10px 14px;margin-bottom:2px;display:flex;'
                     f'justify-content:space-between;align-items:center;">'
                     f'<div>'
-                    f'<span style="font-size:0.92em;font-weight:700;color:#e8c0c0;">{_vd["concept"]}</span>'
-                    f'<span style="font-size:0.75em;color:#8a6a6a;margin-left:10px;">'
+                    f'<span style="font-size:1em;font-weight:700;color:#e8c0c0;">{_vd["concept"]}</span>'
+                    f'<span style="font-size:0.82em;color:#8a6a6a;margin-left:10px;">'
                     f'{_vd["count"]}x · mostly {_vd["top_phase"]}</span></div>'
-                    f'<span style="font-size:0.78em;color:{_vd_sev};font-weight:600;">'
+                    f'<span style="font-size:0.85em;color:{_vd_sev};font-weight:700;'
+                    f'text-shadow:0 0 8px {_vd_sev}33;">'
                     f'avg {_vd["avg_swing"]:.1f} pawns</span>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
-            # Study button for top vulnerability
-            if st.button(f"Study: {_vulns_display[0]['concept']} →", key="dash_vuln_study"):
-                st.session_state.selected_concept = _vulns_display[0]["concept"]
-                st.session_state.navigate_to_coaching = True
-                st.rerun()
-            st.markdown('<div style="height:6px;"></div>', unsafe_allow_html=True)
+                # Show Examples expander with up to 2 concrete examples
+                _vd_examples = _vd.get("examples", [])
+                if _vd_examples:
+                    with st.expander(f"Show Examples ({len(_vd_examples)})", expanded=False):
+                        for _ex_i, _ex in enumerate(_vd_examples):
+                            _ex_color = str(_ex.get("color", "white")).capitalize()
+                            _ex_phase = str(_ex.get("phase", "?")).lower()
+                            _ex_move_num = _ex.get("move_number", "?")
+                            _ex_played = _ex.get("move_san", "?")
+                            _ex_best = _ex.get("best_move_san", "?")
+                            _ex_eval_before = _ex.get("eval_before", 0)
+                            _ex_eval_after = _ex.get("eval_after", 0)
+                            _ex_swing = abs(_ex_eval_before - _ex_eval_after)
+                            # Format eval values with sign
+                            _ex_eb_str = f"{_ex_eval_before:+.1f}"
+                            _ex_ea_str = f"{_ex_eval_after:+.1f}"
+                            st.markdown(
+                                f'<div style="background:#1e1215;border-left:3px solid #e57373;'
+                                f'border-radius:0 6px 6px 0;padding:8px 12px;margin-bottom:8px;">'
+                                f'<div style="font-size:0.88em;color:#b0a0a0;margin-bottom:4px;">'
+                                f'Move {_ex_move_num} ({_ex_color}, {_ex_phase})</div>'
+                                f'<div style="font-size:0.9em;color:#e0d0d0;margin-bottom:2px;">'
+                                f'You played: <b>{_ex_played}</b> '
+                                f'<span style="color:#8a8a8a;">(eval: {_ex_eb_str} → {_ex_ea_str})</span></div>'
+                                f'<div style="font-size:0.9em;color:#e0d0d0;margin-bottom:2px;">'
+                                f'Better was: <b>{_ex_best}</b> '
+                                f'<span style="color:#8a8a8a;">(keeping eval at {_ex_eb_str})</span></div>'
+                                f'<div style="font-size:0.85em;color:#e57373;font-weight:600;margin-top:4px;">'
+                                f'Eval swing: {_ex_swing:.1f} pawns</div>'
+                                f'</div>',
+                                unsafe_allow_html=True,
+                            )
+                        # Per-vulnerability study button
+                        if st.button(f"Study: {_vd['concept']} →", key=f"dash_vuln_study_{_vd_i}"):
+                            st.session_state.selected_concept = _vd["concept"]
+                            st.session_state.navigate_to_coaching = True
+                            st.rerun()
 
-    # ── Group header: QUICK ACTIONS ───────────────────────────────────────
-    st.markdown(
-        '<div style="border-top:1px solid #1e2e3e;padding-top:12px;margin-top:4px;">'
-        '<span style="font-size:0.7em;color:#4a6080;font-weight:700;letter-spacing:0.1em;'
-        'text-transform:uppercase;">QUICK ACTIONS</span></div>',
-        unsafe_allow_html=True,
-    )
-    _qa_card = (
-        '<div style="background:#0f1923;border:1px solid #1e2e3e;border-radius:10px;'
-        'padding:18px 14px;text-align:center;">'
-        '<div style="font-size:1.6em;margin-bottom:6px;">{icon}</div>'
-        '<div style="font-size:0.88em;font-weight:700;color:#cce0f4;margin-bottom:4px;">{title}</div>'
-        '<div style="font-size:0.74em;color:#8a9eb5;line-height:1.4;">{desc}</div></div>'
-    )
-    qa1, qa2, qa3 = st.columns(3)
-    with qa1:
-        st.markdown(_qa_card.format(
-            icon="♟", title="Solve Puzzles",
-            desc="Practice tactics from your games",
-        ), unsafe_allow_html=True)
-        if st.button("Open Puzzles", key="dash_puzzles", use_container_width=True):
-            st.session_state.navigate_to_puzzles = True
-            st.rerun()
-    with qa2:
-        st.markdown(_qa_card.format(
-            icon="♔", title="My Path",
-            desc="Your personalised learning sequence",
-        ), unsafe_allow_html=True)
-        if st.button("Open My Path", key="dash_training", use_container_width=True):
-            st.session_state.navigate_to_my_path = True
-            st.rerun()
-    with qa3:
-        st.markdown(_qa_card.format(
-            icon="♛", title="Review a Game",
-            desc="Analyse any PGN move by move",
-        ), unsafe_allow_html=True)
-        if st.button("Open Review", key="dash_review", use_container_width=True):
-            st.session_state.navigate_to_review = True
-            st.rerun()
-
-    # ── Group header: RECENT GAMES ─────────────────────────────────────────
-    st.markdown(
-        '<div style="border-top:1px solid #1e2e3e;padding-top:12px;margin-top:16px;">'
-        '<span style="font-size:0.7em;color:#4a6080;font-weight:700;letter-spacing:0.1em;'
-        'text-transform:uppercase;">RECENT GAMES</span></div>',
-        unsafe_allow_html=True,
-    )
+    # ── RECENT GAMES ──────────────────────────────────────────────────────
+    st.markdown(_section_header("Recent Games", "#4a6080"), unsafe_allow_html=True)
     _recent_games = st.session_state.get("profile_summaries", [])[:8]
     if not _recent_games:
-        st.markdown(
-            '<div style="text-align:center;padding:24px 0;color:#5a7a8a;font-size:0.88em;">'
-            'Play some games and build your profile to see recent games here.</div>',
-            unsafe_allow_html=True,
-        )
+        _empty_state("♔", "No Games Yet",
+                     "Play some games and build your profile to see recent games here.")
     else:
         for _rg_i, _rg in enumerate(_recent_games):
             _rg_date = _rg.get("date", "")[:10] or "—"
@@ -9920,25 +10842,25 @@ def render_dashboard_tab():
             _rg_blunders = _rg.get("blunders", 0)
             # Result badge
             if _rg_outcome == "win":
-                _rg_badge = '<span style="background:#2e7d32;color:#c8e6c9;font-size:0.72em;font-weight:700;border-radius:4px;padding:2px 8px;">WIN</span>'
+                _rg_badge = '<span style="background:#2e7d32;color:#c8e6c9;font-size:0.82em;font-weight:700;border-radius:4px;padding:2px 8px;">WIN</span>'
             elif _rg_outcome == "loss":
-                _rg_badge = '<span style="background:#b71c1c;color:#ffcdd2;font-size:0.72em;font-weight:700;border-radius:4px;padding:2px 8px;">LOSS</span>'
+                _rg_badge = '<span style="background:#b71c1c;color:#ffcdd2;font-size:0.82em;font-weight:700;border-radius:4px;padding:2px 8px;">LOSS</span>'
             else:
-                _rg_badge = '<span style="background:#455a64;color:#b0bec5;font-size:0.72em;font-weight:700;border-radius:4px;padding:2px 8px;">DRAW</span>'
+                _rg_badge = '<span style="background:#455a64;color:#b0bec5;font-size:0.82em;font-weight:700;border-radius:4px;padding:2px 8px;">DRAW</span>'
             # Mistakes & blunders display
             _rg_m_color = "#fff176" if _rg_mistakes > 0 else "#5a7a8a"
             _rg_b_color = "#ef5350" if _rg_blunders > 0 else "#5a7a8a"
             _rg_errors_html = (
-                f'<span style="font-size:0.78em;color:{_rg_m_color};font-weight:600;">{_rg_mistakes}m</span>'
-                f'<span style="font-size:0.72em;color:#3a5a6a;"> · </span>'
-                f'<span style="font-size:0.78em;color:{_rg_b_color};font-weight:600;">{_rg_blunders}b</span>'
+                f'<span style="font-size:0.88em;color:{_rg_m_color};font-weight:600;">{_rg_mistakes}m</span>'
+                f'<span style="font-size:0.82em;color:#3a5a6a;"> · </span>'
+                f'<span style="font-size:0.88em;color:{_rg_b_color};font-weight:600;">{_rg_blunders}b</span>'
             )
 
             _rg_row_cols = st.columns([1.2, 1.8, 1, 1.2, 1.2])
             with _rg_row_cols[0]:
-                st.markdown(f'<div style="font-size:0.78em;color:#7a9ab0;padding-top:6px;">{_rg_date}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="font-size:0.88em;color:#7a9ab0;padding-top:6px;">{_rg_date}</div>', unsafe_allow_html=True)
             with _rg_row_cols[1]:
-                st.markdown(f'<div style="font-size:0.85em;color:#cce0f4;font-weight:600;padding-top:4px;">vs {_rg_opp}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="font-size:0.95em;color:#cce0f4;font-weight:600;padding-top:4px;">vs {_rg_opp}</div>', unsafe_allow_html=True)
             with _rg_row_cols[2]:
                 st.markdown(f'<div style="padding-top:4px;">{_rg_badge}</div>', unsafe_allow_html=True)
             with _rg_row_cols[3]:
@@ -9955,14 +10877,14 @@ def render_dashboard_tab():
 def render_profile_tab():
     # ── Controls (platform + username moved above sub-nav) ───────────────────
     profile_platform = st.session_state.get("profile_platform", "Chess.com")
-    username = st.session_state.get("profile_username", "").strip().lower()
+    _is_pgn_upload = profile_platform == "PGN Upload"
+    if _is_pgn_upload:
+        username = "pgn_upload"
+    else:
+        username = st.session_state.get("profile_username", "").strip().lower()
 
     with st.expander("Advanced settings", expanded=False):
-        _adv1, _adv2 = st.columns(2)
-        with _adv1:
-            n_months = st.number_input("Months of games", min_value=1, max_value=6, value=2,
-                                       key="profile_months")
-        with _adv2:
+        if _is_pgn_upload:
             depth_choice = st.selectbox(
                 "Analysis depth",
                 options=[10, 12, 15],
@@ -9971,72 +10893,102 @@ def render_profile_tab():
                 key="profile_depth",
             )
             st.caption(_DEPTH_INFO[int(depth_choice)])
+            n_months = 2  # not used for PGN upload, but keep variable defined
+        else:
+            _adv1, _adv2 = st.columns(2)
+            with _adv1:
+                n_months = st.number_input("Months of games", min_value=1, max_value=6, value=2,
+                                           key="profile_months")
+            with _adv2:
+                depth_choice = st.selectbox(
+                    "Analysis depth",
+                    options=[10, 12, 15],
+                    index=1,
+                    format_func=lambda d: {10: "Quick (d10)", 12: "Standard (d12)", 15: "Deep (d15)"}[d],
+                    key="profile_depth",
+                )
+                st.caption(_DEPTH_INFO[int(depth_choice)])
 
-    _est = _estimate_analysis_time(int(n_months), int(depth_choice))
-    build_btn = st.button(
-        f"⚡ Analyze Games ({_est})",
-        type="primary",
-        use_container_width=True,
-    )
+    if _is_pgn_upload:
+        _pgn_games = st.session_state.get("_pgn_upload_games", [])
+        _pgn_count = len(_pgn_games)
+        if _pgn_count:
+            _est_pgn = _estimate_from_game_count(_pgn_count, int(depth_choice))
+            build_btn = st.button(
+                f"⚡ Analyze {_pgn_count} Game{'s' if _pgn_count != 1 else ''} ({_est_pgn})",
+                type="primary",
+                use_container_width=True,
+            )
+        else:
+            build_btn = False
+            st.info("Upload a PGN file above and click **Analyze** to build your profile.")
+    else:
+        _est = _estimate_analysis_time(int(n_months), int(depth_choice))
+        build_btn = st.button(
+            f"⚡ Analyze Games ({_est})",
+            type="primary",
+            use_container_width=True,
+        )
 
     # Auto-trigger build when arriving from Dashboard onboarding
     if st.session_state.pop("_auto_build", False) and not build_btn:
         build_btn = True
 
-    # ── Incremental update detection ────────────────────────────────────────
+    # ── Incremental update detection (not applicable for PGN uploads) ────────
     _ng_cache_key = f"_new_games_check_{username}"
     _ng_params_key = "_new_games_params"
 
-    # Invalidate cache if username or months changed
-    prev_params = st.session_state.get(_ng_params_key)
-    if prev_params != (username, int(n_months)):
-        st.session_state.pop(_ng_cache_key, None)
-        st.session_state[_ng_params_key] = (username, int(n_months))
-
     update_btn = False
-    if not build_btn:
-        saved_profile = db.load_profile(username)
-        if saved_profile:
-            _, existing_summaries, built_at_str = saved_profile
-            if _ng_cache_key not in st.session_state:
-                # First check this session — fetch and compare
-                try:
-                    if profile_platform == "Lichess":
-                        fetched_games = lichess.fetch_recent_games(username, int(n_months))
-                    else:
-                        fetched_games = chesscom.fetch_recent_games(username, int(n_months))
-                    existing_keys = {_summary_dedup_key(s) for s in existing_summaries}
-                    new_games = [g for g in fetched_games
-                                 if _game_dedup_key(g["headers"]) not in existing_keys]
-                    st.session_state[_ng_cache_key] = new_games
-                except Exception:
-                    st.session_state[_ng_cache_key] = []
+    if not _is_pgn_upload:
+        # Invalidate cache if username or months changed
+        prev_params = st.session_state.get(_ng_params_key)
+        if prev_params != (username, int(n_months)):
+            st.session_state.pop(_ng_cache_key, None)
+            st.session_state[_ng_params_key] = (username, int(n_months))
 
-            cached_new = st.session_state.get(_ng_cache_key, [])
-            if cached_new:
-                n_new = len(cached_new)
-                built_date = built_at_str[:10]
-                st.markdown(
-                    f'<div style="background:#1a1a2e;border:1px solid #3a6ea5;border-radius:10px;'
-                    f'padding:14px 18px;margin:10px 0;">'
-                    f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">'
-                    f'<span style="font-size:1.2em;">🆕</span>'
-                    f'<span style="font-size:0.95em;font-weight:700;color:#7ab4e0;">'
-                    f'{n_new} new game{"s" if n_new != 1 else ""} found since last build'
-                    f'</span>'
-                    f'</div>'
-                    f'<div style="font-size:0.78em;color:#6a8a9a;">'
-                    f'{len(existing_summaries)} games analysed on {built_date} '
-                    f'&nbsp;&middot;&nbsp; {n_new} new to analyse</div>'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
-                _upd_est = _estimate_from_game_count(n_new, int(depth_choice))
-                update_btn = st.button(
-                    f"⚡ Update Profile — analyse {n_new} new game{'s' if n_new != 1 else ''} ({_upd_est})",
-                    type="primary",
-                    use_container_width=True,
-                )
+        if not build_btn:
+            saved_profile = db.load_profile(username)
+            if saved_profile:
+                _, existing_summaries, built_at_str = saved_profile
+                if _ng_cache_key not in st.session_state:
+                    # First check this session — fetch and compare
+                    try:
+                        if profile_platform == "Lichess":
+                            fetched_games = lichess.fetch_recent_games(username, int(n_months))
+                        else:
+                            fetched_games = chesscom.fetch_recent_games(username, int(n_months))
+                        existing_keys = {_summary_dedup_key(s) for s in existing_summaries}
+                        new_games = [g for g in fetched_games
+                                     if _game_dedup_key(g["headers"]) not in existing_keys]
+                        st.session_state[_ng_cache_key] = new_games
+                    except Exception:
+                        st.session_state[_ng_cache_key] = []
+
+                cached_new = st.session_state.get(_ng_cache_key, [])
+                if cached_new:
+                    n_new = len(cached_new)
+                    built_date = built_at_str[:10]
+                    st.markdown(
+                        f'<div style="background:#1a1a2e;border:1px solid #3a6ea5;border-radius:10px;'
+                        f'padding:14px 18px;margin:10px 0;">'
+                        f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">'
+                        f'<span style="font-size:1.2em;">🆕</span>'
+                        f'<span style="font-size:0.95em;font-weight:700;color:#7ab4e0;">'
+                        f'{n_new} new game{"s" if n_new != 1 else ""} found since last build'
+                        f'</span>'
+                        f'</div>'
+                        f'<div style="font-size:0.78em;color:#6a8a9a;">'
+                        f'{len(existing_summaries)} games analysed on {built_date} '
+                        f'&nbsp;&middot;&nbsp; {n_new} new to analyse</div>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+                    _upd_est = _estimate_from_game_count(n_new, int(depth_choice))
+                    update_btn = st.button(
+                        f"⚡ Update Profile — analyse {n_new} new game{'s' if n_new != 1 else ''} ({_upd_est})",
+                        type="primary",
+                        use_container_width=True,
+                    )
 
     if update_btn:
         # Double-click guard
@@ -10087,43 +11039,50 @@ def render_profile_tab():
             st.session_state.pop("profile_summaries", None)
             st.session_state.profile_username_built = username
 
-            # ── Fetch games (quick, ~2s — stays synchronous) ─────────────────
-            with st.spinner(f"Fetching games for {username}..."):
-                try:
-                    if profile_platform == "Lichess":
-                        games = lichess.fetch_recent_games(username, int(n_months), bypass_cache=True)
-                    else:
-                        games = chesscom.fetch_recent_games(username, int(n_months), bypass_cache=True)
-                except RuntimeError as e:
-                    st.error(f"{e}")
+            if _is_pgn_upload:
+                # ── PGN Upload: games already parsed in session state ─────────
+                games = st.session_state.get("_pgn_upload_games", [])
+                if not games:
+                    st.warning("No games found in the uploaded PGN file. Please upload a valid PGN.")
                     return
-                except Exception as e:
-                    err_str = str(e)
-                    if "rate limit" in err_str.lower() or "429" in err_str or "403" in err_str:
-                        st.error(
-                            f"**{profile_platform} rate limit reached.** Please wait a few minutes and try again. "
-                            f"This is a temporary restriction from {profile_platform}'s servers."
-                        )
-                    elif "timeout" in err_str.lower() or "timed out" in err_str.lower():
-                        st.error(
-                            f"**Connection timed out** while reaching {profile_platform}. "
-                            f"Check your internet connection and try again."
-                        )
-                    elif "not found" in err_str.lower() or "404" in err_str:
-                        st.error(
-                            f"**Username not found** on {profile_platform}. "
-                            f"Please check the spelling and make sure the account is public."
-                        )
-                    else:
-                        st.error(f"Failed to fetch from {profile_platform}: {e}")
-                    return
+            else:
+                # ── Fetch games (quick, ~2s — stays synchronous) ─────────────────
+                with st.spinner(f"Fetching games for {username}..."):
+                    try:
+                        if profile_platform == "Lichess":
+                            games = lichess.fetch_recent_games(username, int(n_months), bypass_cache=True)
+                        else:
+                            games = chesscom.fetch_recent_games(username, int(n_months), bypass_cache=True)
+                    except RuntimeError as e:
+                        st.error(f"{e}")
+                        return
+                    except Exception as e:
+                        err_str = str(e)
+                        if "rate limit" in err_str.lower() or "429" in err_str or "403" in err_str:
+                            st.error(
+                                f"**{profile_platform} rate limit reached.** Please wait a few minutes and try again. "
+                                f"This is a temporary restriction from {profile_platform}'s servers."
+                            )
+                        elif "timeout" in err_str.lower() or "timed out" in err_str.lower():
+                            st.error(
+                                f"**Connection timed out** while reaching {profile_platform}. "
+                                f"Check your internet connection and try again."
+                            )
+                        elif "not found" in err_str.lower() or "404" in err_str:
+                            st.error(
+                                f"**Username not found** on {profile_platform}. "
+                                f"Please check the spelling and make sure the account is public."
+                            )
+                        else:
+                            st.error(f"Failed to fetch from {profile_platform}: {e}")
+                        return
 
-            if not games:
-                st.warning(
-                    f"No games found for **{username}** in the last {n_months} month(s). "
-                    f"Make sure the username is correct and the account has recent games on {profile_platform}."
-                )
-                return
+                if not games:
+                    st.warning(
+                        f"No games found for **{username}** in the last {n_months} month(s). "
+                        f"Make sure the username is correct and the account has recent games on {profile_platform}."
+                    )
+                    return
 
             if len(games) > _MAX_BUILD_GAMES:
                 st.info(f"Found {len(games)} games — analysing the {_MAX_BUILD_GAMES} most recent for performance.")
@@ -10165,7 +11124,7 @@ def render_profile_tab():
 
     # ── Display profile — restore from DB if session was cleared ──────────────
     if "profile_data" not in st.session_state:
-        username_now = st.session_state.get("profile_username", "")
+        username_now = "pgn_upload" if _is_pgn_upload else st.session_state.get("profile_username", "")
         saved = db.load_profile(username_now)
         if saved:
             p_data, p_summaries, built_at = saved
@@ -10176,10 +11135,16 @@ def render_profile_tab():
             _load_user_data(username_now)
             st.session_state._user_data_loaded = True
         else:
-            st.info(
-                "Enter your username and click "
-                "**⚡ Analyze Games** to generate your personalised coaching profile."
-            )
+            if _is_pgn_upload:
+                st.info(
+                    "Upload a PGN file and click "
+                    "**⚡ Analyze** to generate your personalised coaching profile."
+                )
+            else:
+                st.info(
+                    "Enter your username and click "
+                    "**⚡ Analyze Games** to generate your personalised coaching profile."
+                )
             return
 
     profile   = st.session_state.profile_data
@@ -10270,22 +11235,16 @@ def render_profile_tab():
             "record": {"wins": _rec_w, "losses": _rec_l, "draws": _rec_d},
         }
     # ── Panel 1: YOUR PROFILE ──────────────────────────────────────────────
-    st.markdown(
-        '<div style="font-size:0.7em;color:#4a6080;font-weight:700;'
-        'letter-spacing:0.1em;text-transform:uppercase;margin-bottom:14px;'
-        'margin-top:4px;">'
-        'YOUR PROFILE</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown(_section_header("Your Profile", "#5a7ac8", first=True), unsafe_allow_html=True)
     st.markdown(_profile_overview_html(profile), unsafe_allow_html=True)
 
     # Summary + strengths (side-by-side when both present)
     summary   = profile.get("summary", "")
     strengths = profile.get("strengths", [])
     _summary_html = (
-        f'<div style="background:#0e1117;border-left:3px solid #4a6aaa;'
+        f'<div style="background:#111827;border-left:3px solid #5a7ac8;'
         f'padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:14px;">'
-        f'<span style="color:#c0d0e0;">{summary}</span></div>'
+        f'<span style="color:#b0c8d8;font-size:0.9em;line-height:1.5;">{summary}</span></div>'
     ) if summary else ""
     _strengths_html = ""
     if strengths:
@@ -10313,13 +11272,7 @@ def render_profile_tab():
         st.markdown(_strengths_html, unsafe_allow_html=True)
 
     # ── Panel 2: YOUR SKILLS ──────────────────────────────────────────────
-    st.markdown(
-        '<div style="font-size:0.7em;color:#4a6080;font-weight:700;'
-        'letter-spacing:0.1em;text-transform:uppercase;margin-bottom:14px;'
-        'margin-top:10px;padding-top:8px;border-top:1px solid #152030;">'
-        'YOUR SKILLS</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown(_section_header("Your Skills", "#81c784"), unsafe_allow_html=True)
 
     # Compute skill scores from actual game data
     _skill_scores = compute_skill_scores(disp_sums)
@@ -10386,21 +11339,18 @@ def render_profile_tab():
     if priority and coach_msg:
         _focus_col, _coach_col = st.columns(2)
         with _focus_col:
-            st.markdown(
-                '<div style="font-size:0.75em;color:#7a9ad0;font-weight:700;'
-                'letter-spacing:0.04em;margin:16px 0 10px;">PRIORITY FOCUS</div>',
-                unsafe_allow_html=True,
-            )
+            st.markdown(_section_header("Priority Focus", "#5a7ac8"), unsafe_allow_html=True)
             for j, concept in enumerate(priority):
                 st.markdown(
-                    f'<div style="background:#111827;border:1px solid #1e2e3e;border-radius:10px;'
+                    f'<div class="action-card" style="background:#111827;border:1px solid #1e2e3e;'
+                    f'border-top:2px solid #5a7ac844;border-radius:10px;'
                     f'padding:14px;text-align:center;margin-bottom:6px;">'
                     f'<div style="font-size:0.92em;font-weight:700;color:#cce0f4;">{concept}</div>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
                 if st.button(
-                    "Study →",
+                    "Study \u2192",
                     key=f"profile_focus_{j}",
                     use_container_width=True,
                 ):
@@ -10408,28 +11358,20 @@ def render_profile_tab():
                     st.session_state.navigate_to_coaching = True
                     st.rerun()
         with _coach_col:
+            st.markdown(_section_header("Coach Message", "#e2c97e"), unsafe_allow_html=True)
             st.markdown(
-                '<div style="font-size:0.75em;color:#e2c97e;font-weight:700;'
-                'letter-spacing:0.04em;margin:16px 0 10px;">COACH MESSAGE</div>',
-                unsafe_allow_html=True,
-            )
-            st.markdown(
-                f'<div style="background:#111320;border:1px solid #2a3a5a;'
+                f'<div style="background:#0d1525;border:1px solid #2a3a2a;'
                 f'border-left:3px solid #e2c97e;border-radius:8px;padding:18px 22px;">'
                 f'<div style="font-size:1.05em;color:#cce0f4;line-height:1.65;">{coach_msg}</div>'
                 f'<div style="margin-top:12px;display:flex;align-items:center;gap:7px;">'
-                f'<span style="font-size:1.1em;color:#e2c97e;">♔</span>'
-                f'<span style="font-size:0.78em;font-weight:700;color:#e2c97e;letter-spacing:0.07em;">'
+                f'<span style="font-size:1.2em;color:#e2c97e;filter:drop-shadow(0 0 3px #e2c97e44);">♔</span>'
+                f'<span style="font-size:0.72em;font-weight:700;color:#e2c97e;letter-spacing:0.08em;">'
                 f'BOARDSENSE COACH</span>'
                 f'</div></div>',
                 unsafe_allow_html=True,
             )
     elif priority:
-        st.markdown(
-            '<div style="font-size:0.75em;color:#7a9ad0;font-weight:700;'
-            'letter-spacing:0.04em;margin:16px 0 10px;">PRIORITY FOCUS</div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown(_section_header("Priority Focus", "#5a7ac8"), unsafe_allow_html=True)
         pcols = st.columns(len(priority))
         for j, concept in enumerate(priority):
             with pcols[j]:
@@ -10449,13 +11391,9 @@ def render_profile_tab():
                     st.session_state.navigate_to_coaching = True
                     st.rerun()
     elif coach_msg:
+        st.markdown(_section_header("Coach Message", "#e2c97e"), unsafe_allow_html=True)
         st.markdown(
-            '<div style="font-size:0.75em;color:#e2c97e;font-weight:700;'
-            'letter-spacing:0.04em;margin:16px 0 10px;">COACH MESSAGE</div>',
-            unsafe_allow_html=True,
-        )
-        st.markdown(
-            f'<div style="background:#111320;border:1px solid #2a3a5a;'
+            f'<div style="background:#111827;border:1px solid #1e2e3e;'
             f'border-left:3px solid #e2c97e;border-radius:8px;padding:18px 22px;">'
             f'<div style="font-size:1.05em;color:#cce0f4;line-height:1.65;">{coach_msg}</div>'
             f'<div style="margin-top:12px;display:flex;align-items:center;gap:7px;">'
@@ -10469,13 +11407,7 @@ def render_profile_tab():
     # ── Panel: ERROR PATTERNS ──────────────────────────────────────────────
     _error_map = _get_error_concept_map(disp_sums)
     if _error_map:
-        st.markdown(
-            '<div style="font-size:0.7em;color:#4a6080;font-weight:700;'
-            'letter-spacing:0.1em;text-transform:uppercase;margin-bottom:14px;'
-            'margin-top:10px;padding-top:8px;border-top:1px solid #152030;">'
-            'ERROR PATTERNS</div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown(_section_header("Error Patterns", "#e57373"), unsafe_allow_html=True)
         _ep_items = list(_error_map.items())[:8]
         _ep_concepts = [c for c, _ in _ep_items]
         _ep_counts = [n for _, n in _ep_items]
@@ -10502,13 +11434,7 @@ def render_profile_tab():
                     st.session_state.navigate_to_coaching = True
                     st.rerun()
     else:
-        st.markdown(
-            '<div style="font-size:0.7em;color:#4a6080;font-weight:700;'
-            'letter-spacing:0.1em;text-transform:uppercase;margin-bottom:14px;'
-            'margin-top:10px;padding-top:8px;border-top:1px solid #152030;">'
-            'ERROR PATTERNS</div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown(_section_header("Error Patterns", "#e57373"), unsafe_allow_html=True)
         st.markdown(
             '<p style="color:#5a7a8a;font-size:0.85em;">No error patterns detected yet</p>',
             unsafe_allow_html=True,
@@ -10523,14 +11449,11 @@ def render_profile_tab():
     # (Feature 5: Time Management Insights — inserted here)
     _render_time_management(disp_sums)
 
+    # ── Panel: TIME PRESSURE ANALYSIS ─────────────────────────────────────
+    _render_time_pressure_analysis(disp_sums)
+
     # ── Panel 3: DEEP DIVES ──────────────────────────────────────────────
-    st.markdown(
-        '<div style="font-size:0.7em;color:#4a6080;font-weight:700;'
-        'letter-spacing:0.1em;text-transform:uppercase;margin-bottom:14px;'
-        'margin-top:10px;padding-top:8px;border-top:1px solid #152030;">'
-        'DEEP DIVES</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown(_section_header("Deep Dives", "#e2c97e"), unsafe_allow_html=True)
 
     if _active_tc != "All":
         st.markdown(
@@ -10558,13 +11481,9 @@ def render_profile_tab():
 
     if worst:
         st.markdown(
-            '<div style="display:flex;align-items:center;gap:9px;margin:16px 0 8px;">'
-            '<div style="width:3px;height:15px;background:#e53935;border-radius:2px;flex-shrink:0;"></div>'
-            '<span style="font-size:0.9em;color:#e57373;font-weight:700;'
-            'letter-spacing:0.04em;">MOST INSTRUCTIVE GAMES</span>'
-            '</div>'
-            '<p style="font-size:0.8em;color:#7a9ab0;margin-bottom:12px;">'
-            'Your most error-prone games — ideal candidates for a deep dive at full depth.</p>',
+            _section_header("Most Instructive Games", "#e57373")
+            + '<p style="font-size:0.8em;color:#7a9ab0;margin-bottom:12px;margin-top:-4px;">'
+            'Your most error-prone games — ideal candidates for a deep dive.</p>',
             unsafe_allow_html=True,
         )
 
@@ -10582,7 +11501,7 @@ def render_profile_tab():
 
             with ig_cols[j]:
                 st.markdown(
-                    f'<div style="background:#111827;border:1px solid #2a1a1a;border-radius:10px;'
+                    f'<div style="background:#111827;border:1px solid #1e2e3e;border-radius:10px;'
                     f'padding:14px;text-align:center;margin-bottom:6px;">'
                     f'<div style="font-size:0.72em;color:#7a9ab0;margin-bottom:4px;">'
                     f'{s.get("date","")[:7]}</div>'
@@ -10598,11 +11517,9 @@ def render_profile_tab():
                     _deep_dive_to_review(s["_pgn"], s["white"], s["black"])
 
     # ── Export & Share ──────────────────────────────────────────────────────
-    st.markdown("---")
     _render_export_section()
 
     # ── Social Comparison ──────────────────────────────────────────────────
-    st.markdown("---")
     _render_compare_profiles()
 
 
@@ -10753,6 +11670,152 @@ def render_openings_tab():
                                 unsafe_allow_html=True,
                             )
 
+    # ── My Repertoire — save and drill your prepared moves ──────────────────
+    _rep_username = _current_user()
+    if _rep_username:
+        st.markdown(
+            _section_header("My Repertoire", "#e2c97e")
+            + '<p style="color:#7a9ab0;font-size:0.82em;margin-bottom:12px;margin-top:-4px;">'
+            'Save your prepared moves for key positions. '
+            'Paste a FEN, choose your move, and build your opening book.</p>',
+            unsafe_allow_html=True,
+        )
+
+        # Add new repertoire move
+        with st.expander("Add a move to your repertoire", expanded=False):
+            _rep_cols = st.columns([2, 1])
+            with _rep_cols[0]:
+                _rep_fen = st.text_input(
+                    "Position (FEN):", key="_rep_fen_input",
+                    placeholder="rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+                )
+            with _rep_cols[1]:
+                _rep_color = st.radio("Playing as", ["White", "Black"],
+                                      horizontal=True, key="_rep_color")
+
+            if _rep_fen.strip():
+                try:
+                    _rep_board = chess.Board(_rep_fen.strip())
+                    _rep_svg = chess.svg.board(
+                        _rep_board, size=240,
+                        orientation=chess.WHITE if _rep_color == "White" else chess.BLACK,
+                    )
+                    st.markdown(
+                        f'<div style="display:flex;justify-content:center;">{_rep_svg}</div>',
+                        unsafe_allow_html=True,
+                    )
+                    # Show legal moves
+                    _legal_sans = sorted(
+                        _rep_board.san(m) for m in _rep_board.legal_moves
+                    )
+                    _rep_move = st.selectbox("Your move:", _legal_sans, key="_rep_move_sel")
+                    _rep_note = st.text_input("Note (optional):", key="_rep_note",
+                                              placeholder="e.g., Main line Sicilian")
+                    if st.button("Save to Repertoire", key="rep_save"):
+                        _move_obj = _rep_board.parse_san(_rep_move)
+                        db.save_repertoire_move(
+                            _rep_username, _rep_color.lower(),
+                            _rep_fen.strip(), _rep_move,
+                            _move_obj.uci(), _rep_note,
+                        )
+                        st.success(f"Saved **{_rep_move}** for this position!")
+                        st.rerun()
+                except Exception:
+                    st.error("Invalid FEN format.")
+
+        # Show saved repertoire
+        _rep_items = db.get_repertoire(_rep_username)
+        if _rep_items:
+            _rep_white = [r for r in _rep_items if r["color"] == "white"]
+            _rep_black = [r for r in _rep_items if r["color"] == "black"]
+
+            for _rep_label, _rep_list in [("White Repertoire", _rep_white),
+                                           ("Black Repertoire", _rep_black)]:
+                if not _rep_list:
+                    continue
+                st.markdown(
+                    f'<div style="font-size:0.8em;color:#5a7ac8;font-weight:700;'
+                    f'letter-spacing:0.04em;margin:12px 0 6px;">{_rep_label.upper()} '
+                    f'({len(_rep_list)} positions)</div>',
+                    unsafe_allow_html=True,
+                )
+                for _ri in _rep_list:
+                    _ri_note = f' — {_ri["note"]}' if _ri.get("note") else ""
+                    st.markdown(
+                        f'<div style="display:flex;justify-content:space-between;'
+                        f'align-items:center;padding:5px 0;border-bottom:1px solid #1e2e3e;'
+                        f'font-size:0.84em;">'
+                        f'<span style="color:#cce0f4;font-weight:600;">{_ri["move_san"]}'
+                        f'<span style="color:#7a9ab0;font-weight:400;">{_ri_note}</span></span>'
+                        f'<span style="color:#5a8ab0;font-size:0.75em;">'
+                        f'{_ri["fen"][:30]}…</span></div>',
+                        unsafe_allow_html=True,
+                    )
+
+            # Repertoire drill mode
+            if st.button("Practice My Repertoire", key="rep_drill_start",
+                         use_container_width=True):
+                st.session_state["_rep_drill_active"] = True
+                st.session_state["_rep_drill_idx"] = 0
+                import random
+                random.shuffle(_rep_items)
+                st.session_state["_rep_drill_items"] = _rep_items
+                st.rerun()
+
+            if st.session_state.get("_rep_drill_active"):
+                _rd_items = st.session_state.get("_rep_drill_items", [])
+                _rd_idx = st.session_state.get("_rep_drill_idx", 0)
+                if _rd_idx >= len(_rd_items):
+                    st.success("Repertoire drill complete!")
+                    if st.button("Done", key="rep_drill_done"):
+                        st.session_state.pop("_rep_drill_active", None)
+                        st.rerun()
+                else:
+                    _rd_item = _rd_items[_rd_idx]
+                    st.markdown(
+                        f'<div style="font-size:0.9em;color:#e2c97e;font-weight:700;'
+                        f'margin:12px 0;">Position {_rd_idx + 1}/{len(_rd_items)}</div>',
+                        unsafe_allow_html=True,
+                    )
+                    try:
+                        _rd_board = chess.Board(_rd_item["fen"])
+                        _rd_orient = chess.WHITE if _rd_item["color"] == "white" else chess.BLACK
+                        _rd_svg = chess.svg.board(_rd_board, orientation=_rd_orient, size=300)
+                        st.markdown(
+                            f'<div style="display:flex;justify-content:center;">{_rd_svg}</div>',
+                            unsafe_allow_html=True,
+                        )
+                    except Exception:
+                        pass
+
+                    _rd_reveal_key = f"_rep_revealed_{_rd_idx}"
+                    if not st.session_state.get(_rd_reveal_key):
+                        st.markdown(
+                            '<div style="text-align:center;color:#5a8ab0;padding:12px;">'
+                            'What is your prepared move?</div>',
+                            unsafe_allow_html=True,
+                        )
+                        if st.button("Show Answer", key=f"rep_reveal_{_rd_idx}",
+                                     use_container_width=True):
+                            st.session_state[_rd_reveal_key] = True
+                            st.rerun()
+                    else:
+                        _rd_note = f' — {_rd_item["note"]}' if _rd_item.get("note") else ""
+                        st.markdown(
+                            f'<div style="text-align:center;background:#152a40;'
+                            f'border-radius:8px;padding:14px;margin:8px 0;">'
+                            f'<span style="color:#81c784;font-size:1.2em;font-weight:700;">'
+                            f'{_rd_item["move_san"]}</span>'
+                            f'<span style="color:#7a9ab0;">{_rd_note}</span></div>',
+                            unsafe_allow_html=True,
+                        )
+                        if st.button("Next →", key=f"rep_next_{_rd_idx}",
+                                     use_container_width=True):
+                            st.session_state["_rep_drill_idx"] = _rd_idx + 1
+                            st.rerun()
+
+        st.markdown("---")
+
     summaries = st.session_state.get("profile_summaries", [])
     if not summaries:
         st.info("Build your profile from the **Dashboard** to see your opening stats.")
@@ -10835,14 +11898,85 @@ def render_openings_tab():
                 unsafe_allow_html=True,
             )
 
+    # ── Critical Opening Deviations ───────────────────────────────────────────
+    _cod_by_opening: dict = _defaultdict(list)
+    for s in summaries:
+        op = (_get_op(s) or "Unknown")[:45]
+        if op == "Unknown":
+            continue
+        for cm in s.get("critical_moves", []):
+            cls = cm.get("classification", "")
+            if cls not in ("blunder", "mistake"):
+                continue
+            # Filter to opening phase only
+            phase = cm.get("phase", "")
+            move_num = cm.get("move_number", 999)
+            if phase == "opening" or move_num <= 12:
+                _cod_by_opening[op].append(cm)
+
+    # Only show openings with 2+ opening-phase errors, sort by count desc, limit 5
+    _cod_qualified = sorted(
+        ((op, moves) for op, moves in _cod_by_opening.items() if len(moves) >= 2),
+        key=lambda x: -len(x[1]),
+    )[:5]
+
+    if _cod_qualified:
+        _cod_rows = ""
+        for _cod_op, _cod_moves in _cod_qualified:
+            _cod_count = len(_cod_moves)
+            # Find most common error position (by move number)
+            _cod_mn_counts: dict = _defaultdict(list)
+            for _cm in _cod_moves:
+                _cod_mn_counts[_cm.get("move_number", 0)].append(_cm)
+            _cod_top_mn = max(_cod_mn_counts, key=lambda k: len(_cod_mn_counts[k]))
+            _cod_top_cm = _cod_mn_counts[_cod_top_mn][0]
+            _cod_played = _cod_top_cm.get("move_san", "?")
+            _cod_best = _cod_top_cm.get("best_move_san", "?")
+            _cod_eval_after = _cod_top_cm.get("eval_after", 0)
+            if isinstance(_cod_eval_after, (int, float)):
+                _cod_eval_str = (
+                    f"{_cod_eval_after / 100:+.1f}"
+                    if abs(_cod_eval_after) < 9000
+                    else ("mate" if _cod_eval_after > 0 else "-mate")
+                )
+            else:
+                _cod_eval_str = str(_cod_eval_after)
+            _cod_cls = _cod_top_cm.get("classification", "mistake")
+            _cod_cls_color = "#e57373" if _cod_cls == "blunder" else "#ffb74d"
+
+            _cod_rows += (
+                f'<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;'
+                f'padding-bottom:10px;border-bottom:1px solid #1a2535;">'
+                f'<span style="font-size:1.05em;margin-top:1px;color:{_cod_cls_color};">'
+                f'{"🔴" if _cod_cls == "blunder" else "🟠"}</span>'
+                f'<div style="flex:1;">'
+                f'<div style="color:#cce0f4;font-weight:700;font-size:0.88em;">'
+                f'{_cod_op} <span style="color:#7a9ab0;font-weight:400;">'
+                f'({_cod_count} opening error{"s" if _cod_count != 1 else ""})</span></div>'
+                f'<div style="color:#a0bccc;font-size:0.82em;margin-top:2px;">'
+                f'Move {_cod_top_mn}: You played '
+                f'<span style="color:{_cod_cls_color};font-weight:600;">{_cod_played}</span>'
+                f' <span style="color:#7a9ab0;">({_cod_eval_str})</span>'
+                f' instead of '
+                f'<span style="color:#81c784;font-weight:600;">{_cod_best}</span>'
+                f'</div></div></div>'
+            )
+
+        st.markdown(
+            _section_header("Critical Opening Deviations", accent="#e2c97e", icon="\u26A0")
+            + f'<div style="background:#111827;border:1px solid #1e2e3e;border-radius:10px;'
+            f'padding:16px 18px;margin-bottom:20px;">'
+            f'<div style="font-size:0.72em;color:#a0bccc;font-weight:700;letter-spacing:0.08em;'
+            f'margin-bottom:12px;">WHERE YOU GO WRONG</div>'
+            + _cod_rows
+            + '</div>',
+            unsafe_allow_html=True,
+        )
+
     # ── Master database comparison ──────────────────────────────────────────
-    st.markdown("---")
     st.markdown(
-        '<div style="display:flex;align-items:center;gap:9px;margin-bottom:12px;">'
-        '<div style="width:3px;height:15px;background:#5a7ac8;border-radius:2px;flex-shrink:0;"></div>'
-        '<span style="font-size:0.9em;color:#7ab0e0;font-weight:700;letter-spacing:0.04em;">'
-        'MASTER DATABASE</span></div>'
-        '<p style="color:#7a9ab0;font-size:0.82em;margin-bottom:12px;">'
+        _section_header("Master Database", "#5a7ac8")
+        + '<p style="color:#7a9ab0;font-size:0.82em;margin-bottom:12px;margin-top:-4px;">'
         'How your openings perform in master games (2200+ FIDE rated).</p>',
         unsafe_allow_html=True,
     )
@@ -10918,14 +12052,7 @@ def render_openings_tab():
             unsafe_allow_html=True,
         )
 
-    st.markdown("---")
-    st.markdown(
-        '<div style="display:flex;align-items:center;gap:9px;margin-bottom:12px;">'
-        '<div style="width:3px;height:15px;background:#9c7c38;border-radius:2px;flex-shrink:0;"></div>'
-        '<span style="font-size:0.9em;color:#e2c97e;font-weight:700;letter-spacing:0.04em;">'
-        'GAME LOG BY OPENING</span></div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown(_section_header("Game Log by Opening", "#e2c97e"), unsafe_allow_html=True)
 
     openings: dict[str, list] = {}
     for s in summaries:
@@ -10958,13 +12085,9 @@ def render_openings_tab():
                 )
 
     # ── Opening Drill ──────────────────────────────────────────────────────────
-    st.markdown("---")
     st.markdown(
-        '<div style="display:flex;align-items:center;gap:9px;margin-bottom:12px;">'
-        '<div style="width:3px;height:15px;background:#5a7ac8;border-radius:2px;flex-shrink:0;"></div>'
-        '<span style="font-size:0.9em;color:#7ab0e0;font-weight:700;letter-spacing:0.04em;">'
-        'OPENING DRILL</span></div>'
-        '<p style="color:#7a9ab0;font-size:0.82em;margin-bottom:12px;">'
+        _section_header("Opening Drill", "#5a7ac8")
+        + '<p style="color:#7a9ab0;font-size:0.82em;margin-bottom:12px;margin-top:-4px;">'
         'Practice your most-played opening moves. Positions that appeared in 2+ games '
         'are drilled here.</p>',
         unsafe_allow_html=True,
@@ -11048,224 +12171,6 @@ def render_openings_tab():
 
 # ── Main layout ──────────────────────────────────────────────────────────────
 
-# ── Header bar: settings + user (branding is now in the fixed logo bar) ───────
-_, _hdr_right = st.columns([3, 1])
-
-with _hdr_right:
-    _hdr_has_profile = bool(st.session_state.get("profile_summaries"))
-    _hdr_user = st.session_state.get("profile_username_built", "")
-
-    _hdr_settings_col, _hdr_user_col = st.columns(2)
-
-    with _hdr_settings_col:
-        with st.popover("⚙", use_container_width=True):
-            # ── Board ──
-            st.markdown(
-                '<div style="font-size:0.68em;color:#4a6080;font-weight:700;'
-                'letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px;">BOARD</div>',
-                unsafe_allow_html=True,
-            )
-            st.session_state.board_theme = st.selectbox(
-                "Theme",
-                list(_BOARD_THEMES.keys()),
-                index=list(_BOARD_THEMES.keys()).index(st.session_state.board_theme),
-                key="_bs_theme",
-            )
-            st.session_state.piece_set = st.selectbox(
-                "Piece Set",
-                list(_PIECE_SETS.keys()),
-                index=list(_PIECE_SETS.keys()).index(st.session_state.piece_set),
-                key="_bs_pieces",
-            )
-            st.session_state.board_square_size = st.selectbox(
-                "Board Size",
-                list(_BOARD_SIZES.keys()),
-                index=list(_BOARD_SIZES.keys()).index(st.session_state.board_square_size),
-                key="_bs_size",
-            )
-            st.session_state.sound_enabled = st.toggle(
-                "Move Sounds", value=st.session_state.sound_enabled, key="_bs_sound",
-            )
-            st.session_state.animation_enabled = st.toggle(
-                "Piece Animation", value=st.session_state.animation_enabled, key="_bs_anim",
-            )
-            st.session_state.show_legal_moves = st.toggle(
-                "Show Legal Moves", value=st.session_state.show_legal_moves, key="_bs_legal",
-            )
-            st.session_state.show_coordinates = st.toggle(
-                "Board Coordinates", value=st.session_state.show_coordinates, key="_bs_coords",
-            )
-            # ── Accessibility ──
-            st.markdown(
-                '<div style="font-size:0.68em;color:#4a6080;font-weight:700;'
-                'letter-spacing:0.1em;text-transform:uppercase;margin:12px 0 4px;">ACCESSIBILITY</div>',
-                unsafe_allow_html=True,
-            )
-            st.session_state.high_contrast = st.toggle(
-                "High Contrast", value=st.session_state.high_contrast, key="_bs_hc",
-                help="Boost text brightness and border visibility",
-            )
-            st.session_state.reduce_motion = st.toggle(
-                "Reduce Motion", value=st.session_state.reduce_motion, key="_bs_rm",
-                help="Disable animations and transitions across the app",
-            )
-
-    with _hdr_user_col:
-        if _hdr_has_profile:
-            with st.popover(f"{_hdr_user}", use_container_width=True):
-                _hdr_plat = st.session_state.get("profile_platform", "Chess.com")
-                _hdr_profile = st.session_state.get("profile_data", {})
-                _hdr_sums = st.session_state.get("profile_summaries", [])
-                _hdr_n = _hdr_profile.get("n_games", len(_hdr_sums))
-                st.markdown(
-                    f'<div style="font-size:0.82em;color:#a0bccc;line-height:1.8;margin-bottom:8px;">'
-                    f'<strong style="color:#cce0f4;">{_hdr_user}</strong><br>'
-                    f'{_hdr_plat} · {_hdr_n} games analysed</div>',
-                    unsafe_allow_html=True,
-                )
-                st.markdown(
-                    '<div style="height:1px;background:#1e2e3e;margin:4px 0 8px;"></div>',
-                    unsafe_allow_html=True,
-                )
-
-                # ── External profile link ─────────────────────────────────
-                if _hdr_plat == "Lichess":
-                    _ext_url = f"https://lichess.org/@/{_hdr_user}"
-                else:
-                    _ext_url = f"https://www.chess.com/member/{_hdr_user}"
-                st.markdown(
-                    f'<a href="{_ext_url}" target="_blank" style="font-size:0.82em;'
-                    f'color:#5a9ac8;text-decoration:none;">View {_hdr_plat} profile ↗</a>',
-                    unsafe_allow_html=True,
-                )
-
-                # ── Export profile report ─────────────────────────────────
-                def _build_profile_report() -> str:
-                    lines = [
-                        f"BOARDSENSE — Player Report",
-                        f"{'=' * 40}",
-                        f"Player:   {_hdr_user}",
-                        f"Platform: {_hdr_plat}",
-                        f"Games:    {_hdr_n}",
-                        "",
-                    ]
-                    rec = _hdr_profile.get("record", {})
-                    w, l, d = rec.get("wins", 0), rec.get("losses", 0), rec.get("draws", 0)
-                    total = w + l + d
-                    wr = round(100 * w / total, 1) if total else 0
-                    lines += [
-                        f"Record:   {w}W / {l}L / {d}D  ({wr}% win rate)",
-                        "",
-                    ]
-                    skills = compute_skill_scores(_hdr_sums)
-                    lines.append("Skill Scores (0–100)")
-                    lines.append("-" * 30)
-                    for cat in _SKILL_CATS:
-                        val = skills.get(cat, 50)
-                        bar = "#" * (val // 5) + "·" * (20 - val // 5)
-                        lines.append(f"  {cat:<15} {val:>3}  [{bar}]")
-                    lines.append("")
-                    best = max(skills, key=skills.get) if skills else "—"
-                    worst = min(skills, key=skills.get) if skills else "—"
-                    lines += [
-                        f"Strongest: {best} ({skills.get(best, 0)})",
-                        f"Weakest:   {worst} ({skills.get(worst, 0)})",
-                        "",
-                    ]
-                    pf = _hdr_profile.get("priority_focus", [])
-                    if pf:
-                        lines.append("Priority Focus Areas")
-                        lines.append("-" * 30)
-                        for c in pf:
-                            lines.append(f"  • {c}")
-                        lines.append("")
-                    mpg = _hdr_profile.get("mistakes_per_game", 0)
-                    bpg = _hdr_profile.get("blunders_per_game", 0)
-                    lines += [
-                        "Error Rates",
-                        "-" * 30,
-                        f"  Mistakes / game:  {mpg}",
-                        f"  Blunders / game:  {bpg}",
-                        "",
-                        f"Generated by BoardSense Chess Coaching",
-                    ]
-                    return "\n".join(lines)
-
-                st.download_button(
-                    "Download Report",
-                    data=_build_profile_report(),
-                    file_name=f"boardsense_{_hdr_user}_report.txt",
-                    mime="text/plain",
-                    key="hdr_export",
-                    use_container_width=True,
-                )
-
-                st.markdown(
-                    '<div style="height:1px;background:#1e2e3e;margin:6px 0 8px;"></div>',
-                    unsafe_allow_html=True,
-                )
-
-                # ── Reset training progress ───────────────────────────────
-                if "confirm_reset" not in st.session_state:
-                    st.session_state.confirm_reset = False
-
-                if not st.session_state.confirm_reset:
-                    if st.button("Reset Training Progress", key="hdr_reset", use_container_width=True):
-                        st.session_state.confirm_reset = True
-                        st.rerun()
-                else:
-                    st.markdown(
-                        '<div style="font-size:0.78em;color:#e57373;margin-bottom:6px;">'
-                        'This clears all lessons, puzzle stats, course scores, and curriculum progress. '
-                        'Your game analysis and profile are kept.</div>',
-                        unsafe_allow_html=True,
-                    )
-                    _rc1, _rc2 = st.columns(2)
-                    with _rc1:
-                        if st.button("Confirm", key="hdr_reset_yes", type="primary", use_container_width=True):
-                            db.reset_training_progress(_current_user())
-                            # Clear session-state training data
-                            for _k in ["puzzle_queue", "puzzle_idx", "puzzle_streak",
-                                        "puzzle_best_streak", "puzzle_recent",
-                                        "puzzles_solved_today", "puzzle_correct_today",
-                                        "puzzle_phase_results", "active_course",
-                                        "_puzzle_concept_list", "puzzle_concept_filter"]:
-                                st.session_state.pop(_k, None)
-                            # Clear cached lesson keys
-                            for _k in list(st.session_state.keys()):
-                                if _k.startswith("concept_lesson_"):
-                                    del st.session_state[_k]
-                            st.session_state.confirm_reset = False
-                            st.rerun()
-                    with _rc2:
-                        if st.button("Cancel", key="hdr_reset_no", use_container_width=True):
-                            st.session_state.confirm_reset = False
-                            st.rerun()
-
-                # ── Log out ───────────────────────────────────────────────
-                if st.button("Log out", key="hdr_logout", use_container_width=True):
-                    # Save session stats before clearing
-                    import time as _logout_time
-                    _sess_dur = int(_logout_time.time() - st.session_state.get("_session_start", _logout_time.time()))
-                    if _sess_dur > 10 and _current_user():  # Only save if session was meaningful
-                        db.save_session_stats(
-                            _current_user(),
-                            _sess_dur,
-                            st.session_state.get("_session_puzzles", 0),
-                            st.session_state.get("_session_lessons", 0),
-                            st.session_state.get("_session_reviews", 0),
-                        )
-                    # Keys to preserve across logout (UI prefs only)
-                    _keep = {
-                        "board_theme", "piece_set", "board_square_size",
-                        "sound_enabled", "animation_enabled", "show_legal_moves",
-                        "show_coordinates", "high_contrast", "reduce_motion",
-                    }
-                    _preserved = {k: st.session_state[k] for k in _keep if k in st.session_state}
-                    st.session_state.clear()
-                    st.session_state.update(_preserved)
-                    st.rerun()
-
 # ── Background build: check progress & render banner ─────────────────────────
 # Only activate the polling fragment when a build is actually in progress;
 # run_every fires on the server even if the function returns early.
@@ -11289,188 +12194,386 @@ if _active_build_job:
 if not st.session_state.get("profile_data"):
     _render_onboarding_tour()
 
-tab_dashboard, tab_profile, tab_learn, tab_puzzles, tab_review = st.tabs(
-    ["Dashboard", "Profile", "Learn", "Puzzles", "Game Review"]
-)
+# ── Migrate old session state keys to new names ─────────────────────────
+if st.session_state.get("learn_section") == "Coaching":
+    st.session_state.learn_section = "Lessons"
+if st.session_state.get("learn_section") == "Training":
+    st.session_state.learn_section = "Courses"
+if st.session_state.get("practice_section") == "Endgame Trainer":
+    st.session_state.practice_section = "Endgames"
+if "profile_section" in st.session_state:
+    _old_ps = st.session_state.pop("profile_section", None)
+    if _old_ps == "Player Profile":
+        st.session_state.nav_section = "Home"
+        st.session_state.home_section = "My Profile"
+    elif _old_ps == "Opening Explorer":
+        st.session_state.nav_section = "Practice"
+        st.session_state.practice_section = "Openings"
 
-# JS tab navigation helpers
-def _js_tab_click(tab_label: str) -> str:
-    """Return a JS snippet that clicks the tab whose text matches tab_label."""
-    return f"""
-    <script>
-    (function() {{
-        function clickTab() {{
-            var btns = window.parent.document.querySelectorAll('[data-baseweb="tab"]');
-            for (var i = 0; i < btns.length; i++) {{
-                var t = (btns[i].textContent || '').trim().toLowerCase();
-                if (t === '{tab_label.lower()}') {{ btns[i].click(); return true; }}
-            }}
-            return false;
-        }}
-        if (!clickTab()) {{
-            setTimeout(function() {{
-                if (!clickTab()) setTimeout(clickTab, 200);
-            }}, 60);
-        }}
-    }})();
-    </script>
-    """
-
+# ── Process navigate_to_* flags (pure session state, no JS) ─────────────
 if st.session_state.pop("navigate_to_coaching", False):
-    st.session_state.learn_section = "Coaching"
-    components.html(_js_tab_click("learn"), height=0)
-
+    st.session_state.nav_section = "Learn"
+    st.session_state.learn_section = "Lessons"
 if st.session_state.pop("navigate_to_review", False):
-    components.html(_js_tab_click("game review"), height=0)
-
+    st.session_state.nav_section = "Practice"
+    st.session_state.practice_section = "Game Review"
 if st.session_state.pop("navigate_to_puzzles", False):
-    components.html(_js_tab_click("puzzles"), height=0)
-
+    st.session_state.nav_section = "Practice"
+    st.session_state.practice_section = "Puzzles"
 if st.session_state.pop("navigate_to_endgame_trainer", False):
-    st.session_state.puzzles_section = "Endgame Trainer"
-    components.html(_js_tab_click("puzzles"), height=0)
-
+    st.session_state.nav_section = "Practice"
+    st.session_state.practice_section = "Endgames"
+if st.session_state.pop("navigate_to_notation", False):
+    st.session_state.nav_section = "Practice"
+    st.session_state.practice_section = "Notation"
 if st.session_state.pop("navigate_to_profile", False):
-    st.session_state.profile_section = "Player Profile"
-    components.html(_js_tab_click("profile"), height=0)
-
+    st.session_state.nav_section = "Home"
+    st.session_state.home_section = "My Profile"
 if st.session_state.pop("navigate_to_my_path", False):
+    st.session_state.nav_section = "Learn"
     st.session_state.learn_section = "My Path"
-    components.html(_js_tab_click("learn"), height=0)
-
 if st.session_state.pop("navigate_to_training", False):
-    st.session_state.learn_section = "Training"
-    components.html(_js_tab_click("learn"), height=0)
-
+    st.session_state.nav_section = "Learn"
+    st.session_state.learn_section = "Courses"
 if st.session_state.pop("navigate_to_coach", False):
+    st.session_state.nav_section = "Learn"
     st.session_state.learn_section = "Ask Coach"
-    components.html(_js_tab_click("learn"), height=0)
-
+if st.session_state.pop("navigate_to_spaced_review", False):
+    st.session_state.nav_section = "Learn"
+    st.session_state.learn_section = "Review"
 if st.session_state.pop("navigate_to_openings", False):
-    st.session_state.profile_section = "Opening Explorer"
-    components.html(_js_tab_click("profile"), height=0)
-
+    st.session_state.nav_section = "Practice"
+    st.session_state.practice_section = "Openings"
 if st.session_state.pop("navigate_to_dashboard", False):
-    components.html(_js_tab_click("dashboard"), height=0)
+    st.session_state.nav_section = "Home"
+    st.session_state.home_section = "Dashboard"
 
-with tab_dashboard:
-    render_dashboard_tab()
+# ── Navigation definitions ──────────────────────────────────────────────
+_NAV_SECTIONS = {
+    "Home": [
+        ("Dashboard", "📊", "#5a7ac8"),
+        ("My Profile", "👤", "#e2c97e"),
+    ],
+    "Learn": [
+        ("My Path", "🎯", "#5a7ac8"),
+        ("Lessons", "📚", "#e2c97e"),
+        ("Courses", "🏆", "#81c784"),
+        ("Review", "🔁", "#4fc3f7"),
+        ("Ask Coach", "💬", "#b39ddb"),
+        ("Master Games", "♚", "#ffb74d"),
+    ],
+    "Practice": [
+        ("Puzzles", "🧩", "#4fc3f7"),
+        ("Game Review", "🔍", "#e57373"),
+        ("Openings", "♞", "#e2c97e"),
+        ("Endgames", "♖", "#b39ddb"),
+        ("Notation", "📝", "#81c784"),
+    ],
+}
+_NAV_SECTION_KEYS = {"Home": "home_section", "Learn": "learn_section", "Practice": "practice_section"}
 
-with tab_profile:
-    # Platform + username controls (shared across sub-sections)
-    _prof_ctrl_plat, _prof_ctrl_user = st.columns([1, 2])
-    with _prof_ctrl_plat:
-        _prof_platform = st.radio(
-            "Platform", ["Chess.com", "Lichess"],
-            horizontal=True, key="profile_platform",
+# ── Sidebar navigation ─────────────────────────────────────────────────
+_cur_section = st.session_state.get("nav_section", "Home")
+
+with st.sidebar:
+    for section_name, sub_items in _NAV_SECTIONS.items():
+        _s_active = section_name == _cur_section
+        _s_color = "#cce0f4" if _s_active else "#5a7a8a"
+        _s_weight = "800" if _s_active else "600"
+        st.markdown(
+            f'<div style="font-size:0.78em;font-weight:{_s_weight};color:{_s_color};'
+            f'letter-spacing:0.06em;text-transform:uppercase;'
+            f'padding:8px 0 2px;margin-top:6px;'
+            f'border-top:1px solid #1a2535;text-align:left;">{section_name}</div>',
+            unsafe_allow_html=True,
         )
-    with _prof_ctrl_user:
-        _prof_plat_label = "Chess.com username" if _prof_platform == "Chess.com" else "Lichess username"
-        _prof_placeholder = "e.g., magnuscarlsen" if _prof_platform == "Chess.com" else "e.g., DrNykterstein"
-        _prof_username = st.text_input(_prof_plat_label, value="",
-                                       key="profile_username",
-                                       placeholder=_prof_placeholder)
+        _sub_key = _NAV_SECTION_KEYS[section_name]
+        _cur_sub = st.session_state.get(_sub_key, sub_items[0][0])
+        for sub_name, icon, accent in sub_items:
+            _is_active = _s_active and sub_name == _cur_sub
+            if st.button(
+                f"{icon} {sub_name}",
+                key=f"nav_{section_name}_{sub_name}",
+                use_container_width=True,
+                disabled=_is_active,
+            ):
+                st.session_state.nav_section = section_name
+                st.session_state[_sub_key] = sub_name
+                st.rerun()
 
-    _profile_section = st.radio(
-        "Section",
-        ["Player Profile", "Opening Explorer"],
-        horizontal=True,
-        key="profile_section",
-        label_visibility="collapsed",
+    # ── Sidebar: settings + user ──────────────────────────────────────
+    st.markdown(
+        '<div style="border-top:1px solid #1a2535;margin-top:12px;padding-top:8px;"></div>',
+        unsafe_allow_html=True,
     )
-    if _profile_section == "Player Profile":
+    _sb_has_profile = bool(st.session_state.get("profile_summaries"))
+    _sb_user = st.session_state.get("profile_username_built", "")
+
+    with st.popover("⚙ Settings", use_container_width=True):
+        st.markdown(
+            '<div style="font-size:0.68em;color:#4a6080;font-weight:700;'
+            'letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px;">BOARD</div>',
+            unsafe_allow_html=True,
+        )
+        st.session_state.board_theme = st.selectbox(
+            "Theme", list(_BOARD_THEMES.keys()),
+            index=list(_BOARD_THEMES.keys()).index(st.session_state.board_theme),
+            key="_bs_theme",
+        )
+        st.session_state.piece_set = st.selectbox(
+            "Piece Set", list(_PIECE_SETS.keys()),
+            index=list(_PIECE_SETS.keys()).index(st.session_state.piece_set),
+            key="_bs_pieces",
+        )
+        st.session_state.board_square_size = st.selectbox(
+            "Board Size", list(_BOARD_SIZES.keys()),
+            index=list(_BOARD_SIZES.keys()).index(st.session_state.board_square_size),
+            key="_bs_size",
+        )
+        st.session_state.sound_enabled = st.toggle(
+            "Move Sounds", value=st.session_state.sound_enabled, key="_bs_sound",
+        )
+        st.session_state.animation_enabled = st.toggle(
+            "Piece Animation", value=st.session_state.animation_enabled, key="_bs_anim",
+        )
+        st.session_state.show_legal_moves = st.toggle(
+            "Show Legal Moves", value=st.session_state.show_legal_moves, key="_bs_legal",
+        )
+        st.session_state.show_coordinates = st.toggle(
+            "Board Coordinates", value=st.session_state.show_coordinates, key="_bs_coords",
+        )
+        st.markdown(
+            '<div style="font-size:0.68em;color:#4a6080;font-weight:700;'
+            'letter-spacing:0.1em;text-transform:uppercase;margin:12px 0 4px;">ACCESSIBILITY</div>',
+            unsafe_allow_html=True,
+        )
+        st.session_state.high_contrast = st.toggle(
+            "High Contrast", value=st.session_state.high_contrast, key="_bs_hc",
+            help="Boost text brightness and border visibility",
+        )
+        st.session_state.reduce_motion = st.toggle(
+            "Reduce Motion", value=st.session_state.reduce_motion, key="_bs_rm",
+            help="Disable animations and transitions across the app",
+        )
+
+    if _sb_has_profile:
+        with st.popover(f"👤 {_sb_user}", use_container_width=True):
+            _sb_plat = st.session_state.get("profile_platform", "Chess.com")
+            _sb_profile = st.session_state.get("profile_data", {})
+            _sb_sums = st.session_state.get("profile_summaries", [])
+            _sb_n = _sb_profile.get("n_games", len(_sb_sums))
+            st.markdown(
+                f'<div style="font-size:0.82em;color:#a0bccc;line-height:1.8;margin-bottom:8px;">'
+                f'<strong style="color:#cce0f4;">{_sb_user}</strong><br>'
+                f'{_sb_plat} · {_sb_n} games analysed</div>',
+                unsafe_allow_html=True,
+            )
+            st.markdown(
+                '<div style="height:1px;background:#1e2e3e;margin:4px 0 8px;"></div>',
+                unsafe_allow_html=True,
+            )
+            if _sb_plat == "Lichess":
+                _ext_url = f"https://lichess.org/@/{_sb_user}"
+            else:
+                _ext_url = f"https://www.chess.com/member/{_sb_user}"
+            st.markdown(
+                f'<a href="{_ext_url}" target="_blank" style="font-size:0.82em;'
+                f'color:#5a9ac8;text-decoration:none;">View {_sb_plat} profile ↗</a>',
+                unsafe_allow_html=True,
+            )
+
+            def _build_profile_report() -> str:
+                lines = [
+                    f"BOARDSENSE — Player Report",
+                    f"{'=' * 40}",
+                    f"Player:   {_sb_user}",
+                    f"Platform: {_sb_plat}",
+                    f"Games:    {_sb_n}",
+                    "",
+                ]
+                rec = _sb_profile.get("record", {})
+                w, l, d = rec.get("wins", 0), rec.get("losses", 0), rec.get("draws", 0)
+                total = w + l + d
+                wr = round(100 * w / total, 1) if total else 0
+                lines += [f"Record:   {w}W / {l}L / {d}D  ({wr}% win rate)", ""]
+                skills = compute_skill_scores(_sb_sums)
+                lines.append("Skill Scores (0-100)")
+                lines.append("-" * 30)
+                for cat in _SKILL_CATS:
+                    val = skills.get(cat, 50)
+                    bar = "#" * (val // 5) + "·" * (20 - val // 5)
+                    lines.append(f"  {cat:<15} {val:>3}  [{bar}]")
+                lines.append("")
+                best = max(skills, key=skills.get) if skills else "-"
+                worst = min(skills, key=skills.get) if skills else "-"
+                lines += [
+                    f"Strongest: {best} ({skills.get(best, 0)})",
+                    f"Weakest:   {worst} ({skills.get(worst, 0)})",
+                    "",
+                ]
+                pf = _sb_profile.get("priority_focus", [])
+                if pf:
+                    lines.append("Priority Focus Areas")
+                    lines.append("-" * 30)
+                    for c in pf:
+                        lines.append(f"  - {c}")
+                    lines.append("")
+                mpg = _sb_profile.get("mistakes_per_game", 0)
+                bpg = _sb_profile.get("blunders_per_game", 0)
+                lines += [
+                    "Error Rates", "-" * 30,
+                    f"  Mistakes / game:  {mpg}",
+                    f"  Blunders / game:  {bpg}",
+                    "", "Generated by BoardSense Chess Coaching",
+                ]
+                return "\n".join(lines)
+
+            st.download_button(
+                "Download Report",
+                data=_build_profile_report(),
+                file_name=f"boardsense_{_sb_user}_report.txt",
+                mime="text/plain", key="hdr_export",
+                use_container_width=True,
+            )
+            st.markdown(
+                '<div style="height:1px;background:#1e2e3e;margin:6px 0 8px;"></div>',
+                unsafe_allow_html=True,
+            )
+            if "confirm_reset" not in st.session_state:
+                st.session_state.confirm_reset = False
+            if not st.session_state.confirm_reset:
+                if st.button("Reset Training Progress", key="hdr_reset", use_container_width=True):
+                    st.session_state.confirm_reset = True
+                    st.rerun()
+            else:
+                st.markdown(
+                    '<div style="font-size:0.78em;color:#e57373;margin-bottom:6px;">'
+                    'This clears all lessons, puzzle stats, course scores, and curriculum progress. '
+                    'Your game analysis and profile are kept.</div>',
+                    unsafe_allow_html=True,
+                )
+                _rc1, _rc2 = st.columns(2)
+                with _rc1:
+                    if st.button("Confirm", key="hdr_reset_yes", type="primary", use_container_width=True):
+                        db.reset_training_progress(_current_user())
+                        for _k in ["puzzle_queue", "puzzle_idx", "puzzle_streak",
+                                    "puzzle_best_streak", "puzzle_recent",
+                                    "puzzles_solved_today", "puzzle_correct_today",
+                                    "puzzle_phase_results", "active_course",
+                                    "_puzzle_concept_list", "puzzle_concept_filter"]:
+                            st.session_state.pop(_k, None)
+                        for _k in list(st.session_state.keys()):
+                            if _k.startswith("concept_lesson_"):
+                                del st.session_state[_k]
+                        st.session_state.confirm_reset = False
+                        st.rerun()
+                with _rc2:
+                    if st.button("Cancel", key="hdr_reset_no", use_container_width=True):
+                        st.session_state.confirm_reset = False
+                        st.rerun()
+
+            if st.button("Log out", key="hdr_logout", use_container_width=True):
+                import time as _logout_time
+                _sess_dur = int(_logout_time.time() - st.session_state.get("_session_start", _logout_time.time()))
+                if _sess_dur > 10 and _current_user():
+                    db.save_session_stats(
+                        _current_user(), _sess_dur,
+                        st.session_state.get("_session_puzzles", 0),
+                        st.session_state.get("_session_lessons", 0),
+                        st.session_state.get("_session_reviews", 0),
+                    )
+                _keep = {
+                    "board_theme", "piece_set", "board_square_size",
+                    "sound_enabled", "animation_enabled", "show_legal_moves",
+                    "show_coordinates", "high_contrast", "reduce_motion",
+                }
+                _preserved = {k: st.session_state[k] for k in _keep if k in st.session_state}
+                st.session_state.clear()
+                st.session_state.update(_preserved)
+                st.rerun()
+
+# ── Render content ─────────────────────────────────────────────────────
+if _cur_section == "Home":
+    _home_sub = st.session_state.get("home_section", "Dashboard")
+    if _home_sub == "My Profile":
+        _prof_ctrl_plat, _prof_ctrl_user = st.columns([1, 2])
+        with _prof_ctrl_plat:
+            _prof_platform = st.radio(
+                "Platform", ["Chess.com", "Lichess", "PGN Upload"],
+                horizontal=True, key="profile_platform",
+            )
+        with _prof_ctrl_user:
+            if _prof_platform == "PGN Upload":
+                _pgn_file = st.file_uploader(
+                    "Upload PGN file", type=["pgn"],
+                    key="profile_pgn_file",
+                )
+                if _pgn_file is not None:
+                    _pgn_text = _pgn_file.read().decode("utf-8", errors="replace")
+                    _pgn_parsed = parse_all_games(_pgn_text)
+                    st.session_state["_pgn_upload_games"] = [
+                        {"pgn": pgn, "headers": hdrs} for hdrs, pgn in _pgn_parsed
+                    ]
+                    st.caption(f"{len(_pgn_parsed)} game{'s' if len(_pgn_parsed) != 1 else ''} found in file")
+            else:
+                _prof_plat_label = "Chess.com username" if _prof_platform == "Chess.com" else "Lichess username"
+                _prof_placeholder = "e.g., magnuscarlsen" if _prof_platform == "Chess.com" else "e.g., DrNykterstein"
+                _prof_username = st.text_input(_prof_plat_label, value="",
+                                               key="profile_username",
+                                               placeholder=_prof_placeholder)
         render_profile_tab()
     else:
-        render_openings_tab()
+        render_dashboard_tab()
 
-with tab_learn:
+elif _cur_section == "Learn":
     _selected_concept = st.session_state.get("selected_concept")
     _in_concept_detail = (
         _selected_concept
-        and st.session_state.get("learn_section", "Coaching") == "Coaching"
+        and st.session_state.get("learn_section", "Lessons") == "Lessons"
         and not st.session_state.get("active_course")
     )
-
     if _in_concept_detail:
-        # ── Concept detail header: title left, nav + back right ──────────
-        _hdr_left, _hdr_right = st.columns([3, 2])
-        with _hdr_left:
-            _cd_data = next(
-                (c for c in _coaching_concept_list()
-                 if c["name"].lower() == _selected_concept.lower()), None
-            )
-            _cd_cat = _cd_data["category"] if _cd_data else "From Your Games"
-            st.markdown(
-                f'<div style="display:flex;align-items:center;gap:10px;margin:8px 0 4px;">'
-                f'<span style="font-size:1.45em;font-weight:700;color:#cce0f4;">'
-                f'{_selected_concept}</span>'
-                f'{_category_badge(_cd_cat)}'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-        with _hdr_right:
-            _bk, _rCoach, _rTrain, _rAsk, _rNot = st.columns([1, 1, 1, 1, 1])
-            with _bk:
-                if st.button("← Back", key="coaching_back_hdr",
-                             use_container_width=True):
-                    st.session_state.pop("selected_concept", None)
-                    st.rerun()
-            with _rCoach:
-                if st.button("Coaching", key="learn_nav_coaching",
-                             type="primary", use_container_width=True):
-                    pass  # already on Coaching
-            with _rTrain:
-                if st.button("Training", key="learn_nav_training",
-                             use_container_width=True):
-                    st.session_state.learn_section = "Training"
-                    st.session_state.pop("selected_concept", None)
-                    st.rerun()
-            with _rAsk:
-                if st.button("Coach", key="learn_nav_ask",
-                             use_container_width=True):
-                    st.session_state.learn_section = "Ask Coach"
-                    st.session_state.pop("selected_concept", None)
-                    st.rerun()
-            with _rNot:
-                if st.button("Notation", key="learn_nav_notation",
-                             use_container_width=True):
-                    st.session_state.learn_section = "Notation"
-                    st.session_state.pop("selected_concept", None)
-                    st.rerun()
-
+        if st.button("← Back to Library", key="coaching_back_hdr"):
+            st.session_state.pop("selected_concept", None)
+            st.rerun()
+        _cd_data = next(
+            (c for c in _coaching_concept_list()
+             if c["name"].lower() == _selected_concept.lower()), None
+        )
+        _cd_cat = _cd_data["category"] if _cd_data else "From Your Games"
+        st.markdown(
+            f'<div style="display:flex;align-items:center;gap:10px;margin:4px 0 8px;">'
+            f'<span style="font-size:1.35em;font-weight:700;color:#cce0f4;">'
+            f'{_selected_concept}</span>'
+            f'{_category_badge(_cd_cat)}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
         render_coaching_tab(_detail_header_shown=True)
     else:
-        # ── Standard sub-nav radio ───────────────────────────────────────
-        _learn_section = st.radio(
-            "Section",
-            ["My Path", "Coaching", "Training", "Ask Coach", "Notation"],
-            horizontal=True,
-            key="learn_section",
-            label_visibility="collapsed",
-        )
-        if _learn_section == "My Path":
+        _learn_sub = st.session_state.get("learn_section", "My Path")
+        if _learn_sub == "My Path":
             render_guided_path()
-        elif _learn_section == "Coaching":
+        elif _learn_sub == "Lessons":
             render_coaching_tab()
-        elif _learn_section == "Training":
+        elif _learn_sub == "Courses":
             render_training_tab()
-        elif _learn_section == "Notation":
-            render_notation_tab()
+        elif _learn_sub == "Review":
+            render_review_tab()
+        elif _learn_sub == "Master Games":
+            render_master_games_tab()
         else:
             render_coach_tab()
 
-with tab_puzzles:
-    _puz_section = st.radio(
-        "Section",
-        ["Tactics", "Endgame Trainer"],
-        horizontal=True,
-        key="puzzles_section",
-        label_visibility="collapsed",
-    )
-    if _puz_section == "Tactics":
+else:  # Practice
+    _practice_sub = st.session_state.get("practice_section", "Puzzles")
+    if _practice_sub == "Puzzles":
         render_puzzles_tab()
-    else:
+    elif _practice_sub == "Game Review":
+        render_game_review_tab()
+    elif _practice_sub == "Openings":
+        render_openings_tab()
+    elif _practice_sub == "Endgames":
         render_endgame_trainer()
-
-with tab_review:
-    render_game_review_tab()
+    else:
+        render_notation_tab()

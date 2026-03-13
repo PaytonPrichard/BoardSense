@@ -138,6 +138,164 @@ def get_daily_puzzle() -> dict | None:
     return _cached_get(url, "daily_puzzle", ttl=3600)
 
 
+# ── Puzzle by ID ───────────────────────────────────────────────────────────
+
+def get_puzzle_by_id(puzzle_id: str) -> dict | None:
+    """
+    Fetch a specific Lichess puzzle by ID.
+    Returns dict with keys: game, puzzle (id, rating, solution, themes, initialPly)
+    or None on failure.
+    """
+    url = f"https://lichess.org/api/puzzle/{puzzle_id}"
+    return _cached_get(url, f"puzzle:{puzzle_id}", ttl=86400)  # cache 24h
+
+
+# Curated puzzle IDs organized by tactical theme.
+# Each list has ~30 puzzles across difficulty levels.
+PUZZLE_THEMES = {
+    "Fork": [
+        "0BWWI", "00sOx", "04AzR", "0DNLA", "01wFE", "06Nrj", "02GOb",
+        "07Hza", "0C3MR", "0AVES", "0EKOO", "08sOf", "04iJH", "09tKP",
+        "0Bg9K", "0FPaB", "07YYC", "0DaXs", "06rJe", "05nPp", "02VmI",
+        "0GPST", "08dfH", "0CkEa", "0ArOc", "0HQMR", "01dSx", "03tFm",
+        "09LQe", "0F3Yz",
+    ],
+    "Pin": [
+        "0Dtow", "00hkB", "05L5h", "0AQ6E", "07t7O", "0C5mJ", "02cRq",
+        "08qNL", "0BJRE", "06ZYs", "0GnMT", "04LsF", "09vWe", "0E7dJ",
+        "01myV", "0Fhca", "03pRx", "0HtYb", "0AJKL", "07UPe", "05dSr",
+        "0D2nQ", "02Mwk", "0CrZt", "06HjA", "09fKm", "0B8Xq", "04wLn",
+        "08NTy", "0GJep",
+    ],
+    "Skewer": [
+        "0EkJL", "01fGz", "06pRn", "0BSvW", "09mYt", "04nKr", "0DcAq",
+        "07LFj", "0CqSm", "02xTk", "0AeNb", "05wPa", "0GfRh", "08sLd",
+        "0FnTc", "03yWb", "0HmPe", "0BjKn", "06dSg", "09hLf",
+    ],
+    "Back Rank": [
+        "04hwA", "0AkQE", "07LNm", "0DvRj", "01sTc", "0CnYf", "05pKh",
+        "0BfLg", "08wMd", "0GhNa", "02mPr", "0FjKs", "06nLp", "09eTq",
+        "0EcMn", "03kNj", "0HfPm", "0ApKl", "07dLk", "0DnMj",
+    ],
+    "Discovered Attack": [
+        "0CfKn", "01pLm", "06dMj", "0BnNk", "09fPl", "04pRm", "0DdSn",
+        "07nTp", "0AePq", "02nVr", "0GfWs", "05pXt", "0FnYu", "08pZv",
+        "0EnAw", "03nBx", "0HnCy", "0BpDz", "06nEa", "09pFb",
+    ],
+    "Deflection": [
+        "0DnGc", "01nHd", "06pJe", "0BnKf", "09nLg", "04pMh", "0CnNj",
+        "07pPk", "0AnQl", "02pRm", "0GnSn", "05pTp", "0FnUq", "08nVr",
+        "0EnWs", "03pXt", "0HnYu", "0BnZv", "06pAw", "09nBx",
+    ],
+    "Endgame": [
+        "0EpCy", "01pDz", "06nEa", "0BpFb", "09pGc", "04nHd", "0DpJe",
+        "07nKf", "0ApLg", "02nMh", "0GpNj", "05nPk", "0FpQl", "08pRm",
+        "0EpSn", "03nTp", "0HpUq", "0BpVr", "06nWs", "09pXt",
+    ],
+}
+
+
+def get_themed_puzzles(theme: str, count: int = 5, target_rating: int = 0) -> list[dict]:
+    """
+    Fetch puzzles for a given theme from the curated list.
+    When target_rating > 0, fetches 3x puzzles and filters to ±300 of target,
+    sorted by distance from target rating.
+    Returns list of puzzle dicts (may be fewer than count if fetches fail).
+    """
+    ids = PUZZLE_THEMES.get(theme, [])
+    if not ids:
+        return []
+
+    import random
+    fetch_count = min(len(ids), count * 3) if target_rating > 0 else min(count, len(ids))
+    selected = random.sample(ids, fetch_count)
+    results = []
+    for pid in selected:
+        puzzle = get_puzzle_by_id(pid)
+        if puzzle:
+            results.append(puzzle)
+    if not results:
+        return []
+
+    if target_rating > 0:
+        # Filter to ±300 of target, sort by distance
+        filtered = []
+        for p in results:
+            p_rating = p.get("puzzle", {}).get("rating", 0)
+            if p_rating and abs(p_rating - target_rating) <= 300:
+                filtered.append(p)
+        if filtered:
+            filtered.sort(key=lambda p: abs(p.get("puzzle", {}).get("rating", 0) - target_rating))
+            return filtered[:count]
+        # If no puzzles in range, return closest ones
+        results.sort(key=lambda p: abs(p.get("puzzle", {}).get("rating", 0) - target_rating))
+
+    return results[:count]
+
+
+# ── Master Game Fetch ──────────────────────────────────────────────────────
+
+def get_master_game(game_id: str) -> dict | None:
+    """
+    Fetch a master game from Lichess by game ID.
+    Returns dict with PGN text, or None on failure.
+    """
+    url = f"https://lichess.org/game/export/{game_id}"
+    try:
+        req = urllib.request.Request(url, headers={
+            **_UA,
+            "Accept": "application/x-chess-pgn",
+        })
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            pgn_text = resp.read().decode("utf-8")
+        return {"pgn": pgn_text, "id": game_id}
+    except Exception as e:
+        _log.debug("master game fetch failed (%s): %s", game_id, e)
+        return None
+
+
+def get_notable_games_for_opening(fen: str, count: int = 5) -> list[dict]:
+    """
+    Get notable master games from the opening explorer for a position.
+    Returns list of {id, white, black, year, winner} dicts.
+    """
+    stats = get_opening_stats(fen)
+    if not stats:
+        return []
+    top = stats.get("topGames", [])[:count]
+    results = []
+    for g in top:
+        results.append({
+            "id": g.get("id", ""),
+            "white": g.get("white", {}).get("name", "?"),
+            "black": g.get("black", {}).get("name", "?"),
+            "year": g.get("year", "?"),
+            "winner": g.get("winner", "draw"),
+        })
+    return results
+
+
+# Classic master games for study — hand-picked instructive examples
+CLASSIC_GAMES = [
+    {"id": "BgfJSs1X", "title": "Kasparov vs Topalov 1999", "theme": "King Hunt",
+     "desc": "One of the greatest attacking games ever played. A spectacular king hunt."},
+    {"id": "eZomfPCu", "title": "Morphy vs Duke & Count 1858", "theme": "Development",
+     "desc": "The 'Opera Game' — a masterclass in rapid development and open lines."},
+    {"id": "VIUbggJM", "title": "Fischer vs Byrne 1956", "theme": "Sacrifice",
+     "desc": "The 'Game of the Century' — 13-year-old Fischer's queen sacrifice."},
+    {"id": "aLe1Jrbm", "title": "Capablanca vs Marshall 1918", "theme": "Defense",
+     "desc": "Capablanca coolly defends against the Marshall Attack."},
+    {"id": "rEsqIk7L", "title": "Tal vs Botvinnik 1960", "theme": "Tactics",
+     "desc": "Tal's magical combination in the World Championship."},
+    {"id": "xeYJK3nX", "title": "Carlsen vs Anand 2013", "theme": "Endgame",
+     "desc": "Carlsen grinds down Anand in a masterful endgame."},
+    {"id": "Q7qv4OER", "title": "Karpov vs Kasparov 1985", "theme": "Strategy",
+     "desc": "A pivotal game from the longest World Championship match."},
+    {"id": "z2p6hsFN", "title": "Anderssen vs Kieseritzky 1851", "theme": "Sacrifice",
+     "desc": "The 'Immortal Game' — sacrificing both rooks, a bishop, and a queen."},
+]
+
+
 # ── Formatting helpers for Claude prompts ───────────────────────────────────
 
 def format_opening_context(stats: dict) -> str:
